@@ -4,9 +4,14 @@ const { db } = require('./db');
 const { HttpError, text } = require('./util');
 const plans = require('./plans');
 
-const MAX_CLASSES = 10;
-const MAX_PUPILS = 80;
 const MAX_ASSESSMENTS = 60;
+// Class and pupil limits depend on the plan. A teacher who is over a limit (for example after a downgrade)
+// keeps everything they have. Only adding more is blocked.
+function limitsFor(user) {
+  const plan = plans.effective(user);
+  return { plan, paid: plans.isPaid(plan), ...plans.classLimits(plan) };
+}
+function upgradeHint(lim, paidValue) { return lim.paid ? '' : ' Upgrade to Teacher Plus for up to ' + paidValue + '.'; }
 
 function tx(fn) {
   db.exec('BEGIN');
@@ -69,7 +74,8 @@ function register(add) {
   add('POST', '/api/classes', { auth: true }, (ctx) => {
     const name = text(ctx.body.name, { name: 'Class name', required: true, max: 40 });
     const n = db.prepare('SELECT COUNT(*) c FROM classes WHERE user_id = ?').get(ctx.user.id).c;
-    if (n >= MAX_CLASSES) throw new HttpError(400, `You can keep up to ${MAX_CLASSES} classes.`, 'LIMIT');
+    const lim = limitsFor(ctx.user);
+    if (n >= lim.classes) throw new HttpError(400, `Your plan allows up to ${lim.classes} classes.` + upgradeHint(lim, plans.LIMITS.paid.classes), 'LIMIT');
     if (db.prepare('SELECT 1 FROM classes WHERE user_id = ? AND LOWER(name) = LOWER(?)').get(ctx.user.id, name)) {
       throw new HttpError(409, 'You already have a class with that name.', 'EXISTS');
     }
@@ -114,8 +120,9 @@ function register(add) {
     list = list.filter((p) => p.name);
     if (!list.length) throw new HttpError(400, 'Enter at least one name.');
     const have = db.prepare('SELECT COUNT(*) c FROM pupils WHERE class_id = ?').get(c.id).c;
-    if (have + list.length > MAX_PUPILS) {
-      throw new HttpError(400, `A class can hold up to ${MAX_PUPILS} pupils. You can add ${Math.max(0, MAX_PUPILS - have)} more.`, 'LIMIT');
+    const lim = limitsFor(ctx.user);
+    if (have + list.length > lim.pupils) {
+      throw new HttpError(400, `Your plan allows up to ${lim.pupils} pupils in a class. You can add ${Math.max(0, lim.pupils - have)} more.` + upgradeHint(lim, plans.LIMITS.paid.pupils), 'LIMIT');
     }
     tx(() => {
       const ins = db.prepare('INSERT INTO pupils (user_id, class_id, name, gender, created_at) VALUES (?, ?, ?, ?, ?)');

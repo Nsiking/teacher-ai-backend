@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 7)
+# SmartClass Teacher AI - Backend + teacher app screens (version 8)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -55,6 +55,15 @@ Login and sign-up, Home with six tools (lesson note, scheme of work, questions, 
 My Library with search and filters, offline reading of saved items, Account (plan, change password,
 delete account). The UPGRADE button opens WhatsApp. To change that number, edit SUPPORT_WHATSAPP
 at the top of public/app.js.
+
+## Plans (Free and Teacher Plus)
+Free: 3 generations a day (20 a month), report comments for 5 pupils, marking 3 answers, 2 classes of 50 pupils,
+newest 30 library items open (older ones are locked, never deleted), a footer line on Word and Share.
+Teacher Plus (monthly N1,500, term N3,500, year N9,500): 30 a day, 40 pupils, 15 answers, 10 classes of 80, unlimited
+library, no footer. Every number can be changed with a setting in Render (see .env.example).
+A teacher who goes back to Free keeps all classes and pupils. Only adding more is blocked.
+Activate a plan on /admin (Give a user a paid plan). School licences: /admin > "School licence" gives many teachers
+a plan at once. A 7-day trial = give the plan for 7 days.
 
 ## Legal pages (needed for the Google Play listing)
 /privacy   /terms   /delete-account

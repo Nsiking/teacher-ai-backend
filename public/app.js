@@ -106,9 +106,16 @@
     if (s.token) { S.token = s.token; localStorage.setItem('tt_token', s.token); }
     S.user = s.user; S.usage = s.usage; jset('tt_user', s.user); jset('tt_usage', s.usage);
   }
+  var lastMe = 0;
   async function loadMe() {
     var me = await api('GET', '/api/me');
-    S.user = me.user; S.usage = me.usage; jset('tt_user', me.user); jset('tt_usage', me.usage);
+    S.user = me.user; S.usage = me.usage; jset('tt_user', me.user); jset('tt_usage', me.usage); lastMe = Date.now();
+  }
+  // Re-reads the plan and allowance (for example after we activate a plan). Returns true if the plan changed.
+  async function refreshMe() {
+    var before = S.user && S.user.plan;
+    try { await loadMe(); } catch (e) { return false; }
+    return !!S.user && before !== S.user.plan;
   }
   async function loadMeta() {
     if (S.meta) return;
@@ -116,6 +123,16 @@
     catch (e) { S.meta = jget('tt_meta', null); }
     if (!S.meta) S.meta = { classes: ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6', 'JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3'], terms: ['First Term', 'Second Term', 'Third Term'], limits: { free: 3, paid: 30 } };
   }
+  function plansInfo() {
+    return (S.meta && S.meta.plansInfo) || {
+      monthly: { label: 'Monthly', price: 1500, days: 30 },
+      term: { label: 'Term (3 months)', price: 3500, days: 91 },
+      year: { label: 'Year (3 terms)', price: 9500, days: 365 }
+    };
+  }
+  function naira(n) { return '₦' + String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function waLink(msg) { return 'https://wa.me/' + SUPPORT_WHATSAPP + '?text=' + encodeURIComponent(msg); }
+  function whoAmI() { return (S.user && (S.user.email || S.user.phone)) || ''; }
   function currentTerm() {
     var m = new Date().getMonth() + 1; // Nigerian school year: Sep-Dec, Jan-Mar, Apr-Jul
     return m >= 9 ? 'First Term' : m <= 3 ? 'Second Term' : 'Third Term';
@@ -154,6 +171,7 @@
     }
     await loadMeta();
     if (name === 'auth') { location.replace('#/home'); return; }
+    if (name === 'account' || name === 'home' || Date.now() - lastMe > 5000) await refreshMe();
     switch (name) {
       case 'new': return viewForm(arg);
       case 'item': return viewItem(Number(arg));
@@ -215,6 +233,7 @@
       (S.installEvt ? '<div class="banner"><span>Install this app on your phone for quick access.</span><button class="btn small" data-act="install">Install</button></div>' : '') +
       '<div class="tiles">' + tiles + '</div>' +
       '<div class="card" style="margin-top:14px"><div class="kv" style="padding-top:0"><span>Today</span><b>' + left + ' of ' + u.limit + ' left</b></div>' +
+      (u.monthlyLimit ? '<div class="kv"><span>This month</span><b>' + Math.max(0, u.monthlyLimit - (u.monthlyUsed || 0)) + ' of ' + u.monthlyLimit + ' left</b></div>' : '') +
       '<div class="meter"><i style="width:' + pct + '%"></i></div>' +
       (isPaid() ? '' : '<p class="hint">Free plan. <button class="link" data-go="account" style="padding:0">See how to upgrade</button></p>') + '</div>' +
       '<h2 class="sec">Recent</h2><div id="recent"><p class="hint">Loading…</p></div>',
@@ -232,6 +251,7 @@
   }
   function itemButton(it) {
     var key = CODE_TO_KEY[it.kind], k = KINDS[key] || { icon: '📄', label: 'Item' };
+    if (it.locked) return '<button class="item locked" data-act="lockeditem"><span class="ico">🔒</span><span><div class="t">' + esc(it.title) + '</div><div class="m">' + k.label + ' · locked on the free plan</div></span></button>';
     return '<button class="item" data-go="item/' + it.id + '"><span class="ico">' + k.icon + '</span><span><div class="t">' + esc(it.title) + '</div><div class="m">' + k.label + ' · ' + fmtDate(it.createdAt) + '</div></span></button>';
   }
 
@@ -408,9 +428,9 @@
     return o;
   }
   function hideBusy() { clearInterval(busyTimer); closeModal(); }
-  function showLimit(message) {
-    var wa = 'https://wa.me/' + SUPPORT_WHATSAPP + '?text=' + encodeURIComponent('Hello, I would like to upgrade my SmartClass Teacher AI plan. My account: ' + (S.user.email || S.user.phone || ''));
-    modal('<h3>Daily limit reached</h3><p class="sub">' + esc(message) + '</p><a class="btn" href="' + wa + '" target="_blank" rel="noopener">Upgrade on WhatsApp</a><button class="btn alt" data-act="closemodal">Close</button>');
+  function showLimit(message, code) {
+    modal('<h3>' + (code === 'LIMIT_REACHED_MONTH' ? 'Monthly limit reached' : 'Daily limit reached') + '</h3><p class="sub">' + esc(message) + '</p>' +
+      '<button class="btn" data-act="seeplans">See plans and prices</button><button class="btn alt" data-act="closemodal">Close</button>');
   }
   async function doGenerate(btn) {
     var kind = btn.getAttribute('data-kind');
@@ -425,7 +445,7 @@
       hideBusy(); location.hash = '#/item/' + r.id;
     } catch (e) {
       hideBusy(); btn.disabled = false;
-      if (e.code === 'LIMIT_REACHED') showLimit(e.message);
+      if (e.code === 'LIMIT_REACHED' || e.code === 'LIMIT_REACHED_MONTH') showLimit(e.message, e.code);
       else $('#f-err').textContent = e.message;
     }
   }
@@ -482,7 +502,10 @@
     shell('<div class="empty">Opening…</div>', { title: 'Saved item', back: 'library' });
     var it;
     try { it = await getItem(id); }
-    catch (e) { shell('<div class="empty">' + esc(e.offline ? 'This item was not saved on this phone. Connect to the internet to open it.' : e.message) + '</div>', { title: 'Saved item', back: 'library' }); return; }
+    catch (e) {
+      shell('<div class="empty">' + esc(e.offline ? 'This item was not saved on this phone. Connect to the internet to open it.' : e.message) +
+        (e.code === 'LIBRARY_LOCKED' ? '<br><br><button class="btn" data-act="seeplans">See plans</button>' : '') + '</div>', { title: 'Saved item', back: 'library' }); return;
+    }
     currentItem = it;
     var truncated = sessionStorage.getItem('tt_trunc') === String(id);
     var canShare = !!navigator.share || (IS_NATIVE && !!plugin('Share'));
@@ -526,6 +549,7 @@
     var html = it.kind === 'report_comments' && parseComments(it.content)
       ? '<h1>' + esc(it.title) + '</h1>' + parseComments(it.content).map(function (c) { return '<p><b>' + esc(c.name) + '</b><br>' + esc(c.comment) + '</p>'; }).join('')
       : window.md(it.content);
+    if (!isPaid()) html += '<p style="margin-top:24pt;color:#777777;font-size:9pt">Made with SmartClass Teacher AI (free plan)</p>';
     var land = it.kind === 'scheme_of_work';
     var doc = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>' + esc(it.title) +
       '</title><style>' + (land ? '@page WordSection1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:36pt}div.WordSection1{page:WordSection1}' : '') +
@@ -559,11 +583,13 @@
   var libFilter = 'all', libSearch = '';
   async function viewLibrary() {
     shell('<h1>My Library</h1><p class="sub" id="lib-sub">Everything you have made is saved here.</p>' +
+      '<div id="lib-banner"></div>' +
       '<div class="chips no-print" id="chips"></div>' +
       '<input id="lib-q" type="search" placeholder="Search by title" value="' + esc(libSearch) + '" style="margin-bottom:12px">' +
       '<div id="lib-list"><p class="hint">Loading…</p></div>', { title: 'My Library', nav: 'library' });
     var items, offline = false;
-    try { var r = await api('GET', '/api/library?limit=100'); items = r.items; jset('tt_list', items); }
+    window.__libLocked = 0;
+    try { var r = await api('GET', '/api/library?limit=100'); items = r.items; window.__libLocked = r.lockedCount || 0; jset('tt_list', items); }
     catch (e) { items = jget('tt_list', []); offline = true; }
     window.__libItems = items;
     if (offline && $('#lib-sub')) $('#lib-sub').textContent = 'Offline: showing what is saved on this phone. Items you opened before can be read offline.';
@@ -573,6 +599,8 @@
     var items = window.__libItems || [];
     var chips = [['all', 'All'], ['lesson_note', 'Lesson notes'], ['scheme_of_work', 'Schemes'], ['questions', 'Questions'], ['marking', 'Marking'], ['worksheet', 'Worksheets'], ['report_comments', 'Comments']];
     if ($('#chips')) $('#chips').innerHTML = chips.map(function (c) { return '<button class="chip' + (libFilter === c[0] ? ' on' : '') + '" data-act="filter" data-v="' + c[0] + '">' + c[1] + '</button>'; }).join('');
+    if ($('#lib-banner')) $('#lib-banner').innerHTML = window.__libLocked
+      ? '<div class="banner"><span>' + window.__libLocked + ' older item' + (window.__libLocked === 1 ? ' is' : 's are') + ' locked on the free plan. Nothing is deleted. Upgrade to Teacher Plus to open them.</span><button class="btn small" data-act="seeplans">See plans</button></div>' : '';
     var q = libSearch.toLowerCase();
     var list = items.filter(function (it) { return (libFilter === 'all' || it.kind === libFilter) && (!q || it.title.toLowerCase().indexOf(q) > -1); });
     if ($('#lib-list')) $('#lib-list').innerHTML = list.length ? list.map(itemButton).join('') : '<div class="empty">' + (items.length ? 'No matching items.' : 'Nothing saved yet. Make your first lesson note from the Home screen.') + '</div>';
@@ -581,16 +609,16 @@
   // ---------------------------------------------------------------- account
   function viewAccount() {
     var u = S.user, us = S.usage || { used: 0, limit: 0 };
-    var wa = 'https://wa.me/' + SUPPORT_WHATSAPP + '?text=' + encodeURIComponent('Hello, I would like to upgrade my SmartClass Teacher AI plan. My account: ' + (u.email || u.phone || ''));
     shell(
       '<h1>Account</h1>' +
       '<div class="card"><div class="kv"><span>Name</span><b>' + esc(u.name) + '</b></div>' +
       (u.email ? '<div class="kv"><span>Email</span><b>' + esc(u.email) + '</b></div>' : '') +
       (u.phone ? '<div class="kv"><span>Phone</span><b>' + esc(u.phone) + '</b></div>' : '') +
-      '<div class="kv"><span>Plan</span><b>' + (isPaid() ? esc(u.plan === 'term' ? 'Term plan' : 'Monthly plan') : 'Free') + '</b></div>' +
+      '<div class="kv"><span>Plan</span><b>' + (isPaid() ? 'Teacher Plus (' + esc((plansInfo()[u.plan] || { label: u.plan }).label) + ')' : 'Free') + '</b></div>' +
       (isPaid() && u.planExpiresAt ? '<div class="kv"><span>Valid until</span><b>' + fmtDate(u.planExpiresAt) + '</b></div>' : '') +
-      '<div class="kv"><span>Used today</span><b>' + us.used + ' of ' + us.limit + '</b></div></div>' +
-      (isPaid() ? '' : '<div class="card"><b>Need more every day?</b><p class="sub">The paid plan gives you ' + (S.meta.limits ? S.meta.limits.paid : 30) + ' generations a day, up to 40 pupils at once for report comments, and our best AI model. Online payment is coming soon. For now, message us to upgrade.</p><a class="btn" href="' + wa + '" target="_blank" rel="noopener">Upgrade on WhatsApp</a></div>') +
+      '<div class="kv"><span>Used today</span><b>' + us.used + ' of ' + us.limit + '</b></div>' +
+      (us.monthlyLimit ? '<div class="kv"><span>Used this month</span><b>' + (us.monthlyUsed || 0) + ' of ' + us.monthlyLimit + '</b></div>' : '') + '</div>' +
+      plansCard() +
       (S.installEvt ? '<div class="card"><b>Install the app</b><p class="sub">Add it to your home screen.</p><button class="btn alt" data-act="install">Install</button></div>' : '') +
       '<div class="card"><b>Change password</b>' +
       '<label for="c-old">Current password</label><input id="c-old" type="password" autocomplete="current-password">' +
@@ -603,6 +631,26 @@
       '<div class="err" id="d-err"></div><button class="btn block danger" data-act="deleteaccount">Delete my account</button></div>',
       { title: 'Account', nav: 'account' }
     );
+  }
+  function plansCard() {
+    var info = plansInfo(), cl = (S.meta && S.meta.classLimits) || { free: { classes: 2, pupils: 50 }, paid: { classes: 10, pupils: 80 } };
+    var lim = (S.meta && S.meta.limits) || { free: 3, paid: 30 };
+    var rows = ['monthly', 'term', 'year'].map(function (k) {
+      var p = info[k]; if (!p) return '';
+      var note = k === 'term' ? 'Save ' + naira(3 * info.monthly.price - p.price) + ' (3 months)' : k === 'year' ? 'Best value: about ' + naira(p.price / 12) + ' a month' : 'Pay month by month';
+      var msg = 'Hello, I would like to subscribe to SmartClass Teacher AI Teacher Plus: ' + p.label + ' (' + naira(p.price) + '). My account: ' + whoAmI();
+      return '<div class="plan"><div><b>' + esc(p.label) + '</b><div class="hint" style="margin:0">' + esc(note) + '</div></div>' +
+        '<div class="plan-r"><b>' + naira(p.price) + '</b><a class="btn small" href="' + waLink(msg) + '" target="_blank" rel="noopener">' + (isPaid() ? 'Renew' : 'Choose') + '</a></div></div>';
+    }).join('');
+    return '<div class="card"><b>' + (isPaid() ? 'Renew or change your plan' : 'Teacher Plus') + '</b>' +
+      '<ul class="perks"><li><b>' + lim.paid + '</b> generations a day (free: ' + lim.free + ' a day, ' + (lim.freeMonthly || 20) + ' a month)</li>' +
+      '<li>Report comments for up to <b>40 pupils</b> at once (free: 5)</li>' +
+      '<li>Mark up to <b>15 answers</b> at once (free: 3)</li>' +
+      '<li><b>' + cl.paid.classes + ' classes</b> of up to ' + cl.paid.pupils + ' pupils (free: ' + cl.free.classes + ' classes of ' + cl.free.pupils + ')</li>' +
+      '<li><b>Unlimited library</b> (free: your newest 30 items)</li>' +
+      '<li>No “Made with SmartClass Teacher AI” line on Word and Share</li>' +
+      '<li>WhatsApp support</li></ul>' + rows +
+      '<p class="hint">Payment is by WhatsApp for now. We activate your plan as soon as we confirm it. Online payment is coming soon.</p></div>';
   }
   async function changePw(btn) {
     var o = $('#c-old').value, n = $('#c-new').value; $('#c-err').textContent = '';
@@ -660,7 +708,7 @@
     copyitem: function () { copyText(plainText(currentItem)); },
     copytext: function (el) { copyText(el.getAttribute('data-text')); },
     shareitem: function () {
-      var sh = plugin('Share'), txt = plainText(currentItem);
+      var sh = plugin('Share'), txt = plainText(currentItem) + (isPaid() ? '' : '\n\n— Made with SmartClass Teacher AI');
       if (IS_NATIVE && sh) sh.share({ title: currentItem.title, text: txt, dialogTitle: 'Share' }).catch(function () { });
       else if (navigator.share) navigator.share({ title: currentItem.title, text: txt }).catch(function () { });
     },
@@ -677,6 +725,11 @@
     deleteitem: confirmDelete,
     dodelete: doDelete,
     closemodal: closeModal,
+    seeplans: function () { closeModal(); go('#/account'); },
+    lockeditem: function () {
+      modal('<h3>Locked on the free plan</h3><p class="sub">The free plan opens your newest ' + ((S.meta && S.meta.classLimits && S.meta.classLimits.free.library) || 30) + ' items. This older item is safe and nothing is deleted. Upgrade to Teacher Plus to open everything again.</p>' +
+        '<button class="btn" data-act="seeplans">See plans and prices</button><button class="btn alt" data-act="closemodal">Close</button>');
+    },
     filter: function (el) { libFilter = el.getAttribute('data-v'); drawLibrary(); },
     changepw: changePw,
     logout: function () { clearSession(); authMode = 'login'; location.hash = '#/auth'; viewAuth(); },
@@ -711,6 +764,9 @@
     if (e.key === 'Enter' && (e.target.id === 'a-id' || e.target.id === 'a-pw' || e.target.id === 'a-name')) { var b = $('[data-act="auth"]'); if (b) b.click(); }
   });
   window.addEventListener('hashchange', route);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && S.token && S.user) refreshMe().then(function (changed) { if (changed) route(); });
+  });
   window.addEventListener('online', function () { var o = $('#offline'); if (o) o.classList.add('hide'); });
   window.addEventListener('offline', function () { var o = $('#offline'); if (o) o.classList.remove('hide'); });
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); S.installEvt = e; });

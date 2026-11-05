@@ -216,6 +216,98 @@ async function call(method, p, body, token, admin) {
     r = await call('GET', '/api/library', null, token2);
     check('other user library is empty', r.body.items.length === 0);
 
+    console.log('Plans: what the app tells the phone');
+    r = await call('GET', '/api/meta');
+    check('meta lists the three paid plans with naira prices', r.body.plansInfo.monthly.price === 1500 && r.body.plansInfo.term.price === 3500 && r.body.plansInfo.year.price === 9500 && r.body.plans.includes('year'), r.body);
+    check('meta lists the free monthly cap and class limits', r.body.limits.freeMonthly === 20 && r.body.classLimits.free.classes === 2 && r.body.classLimits.paid.classes === 10, r.body);
+    r = await call('GET', '/api/me', null, token2);
+    const id2 = r.body.user.id;
+    check('free user sees daily and monthly allowance', r.body.usage.limit === 3 && r.body.usage.monthlyLimit === 20 && r.body.usage.monthlyUsed === 0, r.body.usage);
+    r = await call('GET', '/api/me', null, token);
+    check('paid user has no monthly cap', r.body.usage.monthlyLimit === null, r.body.usage);
+
+    console.log('Plans: free monthly cap (20 a month)');
+    r = await call('POST', '/api/auth/signup', { name: 'Cap Tester', email: 'cap@example.com', password: 'password123' });
+    const tokenCap = r.body.token, idCap = r.body.user.id;
+    const monthNow = new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 7);
+    const dbx = new DatabaseSync(path.join(dir, 'teacher.db'));
+    dbx.prepare('INSERT INTO usage (user_id, day, count) VALUES (?, ?, 19)').run(idCap, monthNow + '-00'); // 19 used earlier this month
+    r = await call('POST', '/api/generate/worksheet', { subject: 'Maths', className: 'JSS 1', topic: 'Fractions' }, tokenCap);
+    check('the 20th free generation of the month works', r.status === 200 && r.body.usage.monthlyUsed === 20 && r.body.usage.used === 1, r.body);
+    r = await call('POST', '/api/generate/worksheet', { subject: 'Maths', className: 'JSS 1', topic: 'Decimals' }, tokenCap);
+    check('the 21st is blocked with the monthly message', r.status === 429 && r.body.code === 'LIMIT_REACHED_MONTH' && /this month/.test(r.body.error), r.body);
+    r = await call('GET', '/api/me', null, tokenCap);
+    check('the blocked try did not use anything', r.body.usage.monthlyUsed === 20 && r.body.usage.used === 1, r.body.usage);
+    r = await call('POST', '/api/admin/set-plan', { identifier: 'cap@example.com', plan: 'term' }, null, true);
+    check('term plan without days uses the default (about 91 days)', r.status === 200 && Math.abs(r.body.user.planExpiresAt - (Date.now() + 91 * 86400000)) < 60000, r.body);
+    r = await call('POST', '/api/generate/worksheet', { subject: 'Maths', className: 'JSS 1', topic: 'Decimals' }, tokenCap);
+    check('after upgrading, the monthly cap no longer applies', r.status === 200, r.body);
+
+    console.log('Plans: class limits (free 2 classes, 50 pupils)');
+    r = await call('POST', '/api/classes', { name: 'Free A' }, token2);
+    const freeA = r.body.id;
+    r = await call('POST', '/api/classes', { name: 'Free B' }, token2);
+    check('free user can make 2 classes', r.status === 200);
+    r = await call('POST', '/api/classes', { name: 'Free C' }, token2);
+    check('3rd class blocked, with an upgrade hint', r.status === 400 && r.body.code === 'LIMIT' && /Upgrade to Teacher Plus for up to 10/.test(r.body.error), r.body);
+    r = await call('POST', `/api/classes/${freeA}/pupils`, { names: Array.from({ length: 51 }, (_, i) => 'Pupil ' + i).join('\n') }, token2);
+    check('51 pupils blocked on free (max 50)', r.status === 400 && /up to 50/.test(r.body.error) && /Upgrade/.test(r.body.error), r.body);
+    r = await call('POST', `/api/classes/${freeA}/pupils`, { names: Array.from({ length: 50 }, (_, i) => 'Pupil ' + i).join('\n') }, token2);
+    check('50 pupils allowed on free', r.status === 200 && r.body.added === 50, r.body);
+
+    console.log('Plans: downgrade keeps everything, only adding is blocked');
+    r = await call('POST', '/api/admin/set-plan', { identifier: '08031234567', plan: 'free' }, null, true);
+    check('paid teacher set back to free', r.status === 200 && r.body.user.plan === 'free');
+    r = await call('GET', '/api/classes', null, token);
+    check('their 10+ classes are all still there', r.status === 200 && r.body.classes.length >= 10, r.body.classes.length);
+    r = await call('GET', `/api/classes/${classId}`, null, token);
+    check('and still open', r.status === 200 && r.body.pupils.length === 2);
+    r = await call('POST', '/api/classes', { name: 'Brand new class' }, token);
+    check('but a new class is blocked', r.status === 400 && r.body.code === 'LIMIT');
+    r = await call('PUT', `/api/assessments/${aId}/scores`, { scores: { [p1]: 12 } }, token);
+    check('and they can still edit existing scores', r.status === 200);
+    await call('POST', '/api/admin/set-plan', { identifier: '08031234567', plan: 'monthly', days: 30 }, null, true);
+
+    console.log('Plans: free library shows the newest 30 and locks older ones (nothing is deleted)');
+    const insItem = dbx.prepare("INSERT INTO items (user_id, kind, title, meta, content, created_at, updated_at) VALUES (?, 'worksheet', ?, NULL, 'x', ?, ?)");
+    for (let i = 1; i <= 33; i++) insItem.run(id2, 'Old item ' + i, 1000 + i, 1000 + i);
+    r = await call('GET', '/api/library?limit=100', null, token2);
+    const lockedTitles = r.body.items.filter((x) => x.locked).map((x) => x.title).sort();
+    check('33 items on free: the 3 oldest are locked', r.status === 200 && r.body.items.length === 33 && r.body.lockedCount === 3 && r.body.libraryLimit === 30 && lockedTitles.join() === ['Old item 1', 'Old item 2', 'Old item 3'].join(), { count: r.body.lockedCount, lockedTitles });
+    const idOld = r.body.items.find((x) => x.title === 'Old item 1').id, idNew = r.body.items.find((x) => x.title === 'Old item 33').id;
+    r = await call('GET', '/api/library/' + idOld, null, token2);
+    check('a locked item cannot be opened', r.status === 403 && r.body.code === 'LIBRARY_LOCKED', r.body);
+    r = await call('PUT', '/api/library/' + idOld, { title: 'Hacked' }, token2);
+    check('a locked item cannot be edited', r.status === 403 && r.body.code === 'LIBRARY_LOCKED');
+    r = await call('GET', '/api/library/' + idNew, null, token2);
+    check('a newest item opens normally', r.status === 200 && r.body.content === 'x');
+    r = await call('POST', '/api/admin/set-plan', { identifier: 'okon@example.com', plan: 'year' }, null, true);
+    check('year plan without days uses 365 days', r.status === 200 && r.body.user.plan === 'year' && Math.abs(r.body.user.planExpiresAt - (Date.now() + 365 * 86400000)) < 60000, r.body);
+    r = await call('GET', '/api/library?limit=100', null, token2);
+    check('after upgrading, nothing is locked any more', r.body.lockedCount === 0 && r.body.items.every((x) => !x.locked) && r.body.libraryLimit === null);
+    r = await call('GET', '/api/library/' + idOld, null, token2);
+    check('and the old item opens again, so nothing was lost', r.status === 200);
+    r = await call('POST', `/api/classes`, { name: 'Free C' }, token2);
+    check('and class limits are the paid ones (3rd class works)', r.status === 200, r.body);
+    await call('POST', '/api/admin/set-plan', { identifier: 'okon@example.com', plan: 'free' }, null, true);
+    r = await call('DELETE', '/api/library/' + idOld, null, token2);
+    check('a locked item can still be deleted', r.status === 200);
+
+    console.log('School licences: give many teachers a plan at once');
+    await call('POST', '/api/auth/signup', { name: 'School T1', phone: '08030000001', password: 'password123' });
+    await call('POST', '/api/auth/signup', { name: 'School T2', email: 't2@school.com', password: 'password123' });
+    r = await call('POST', '/api/admin/set-plan-bulk', { identifiers: '08030000001\n t2@school.com ,\nnobody@school.com', plan: 'term' }, null, true);
+    check('bulk: 2 teachers done, 1 not found', r.status === 200 && r.body.done === 2 && r.body.failed === 1 && r.body.results[2].ok === false, r.body);
+    r = await call('POST', '/api/auth/login', { identifier: '08030000001', password: 'password123' });
+    check('bulk: the teacher is on the term plan with about 91 days', r.body.user.plan === 'term' && Math.abs(r.body.user.planExpiresAt - (Date.now() + 91 * 86400000)) < 60000, r.body.user);
+    r = await call('POST', '/api/admin/set-plan-bulk', { identifiers: ['x@y.com'], plan: 'gold' }, null, true);
+    check('bulk: a wrong plan name is refused', r.status === 400);
+    r = await call('POST', '/api/admin/set-plan-bulk', { identifiers: Array.from({ length: 201 }, (_, i) => 'u' + i + '@x.com'), plan: 'term' }, null, true);
+    check('bulk: more than 200 at a time is refused', r.status === 400);
+    r = await call('POST', '/api/admin/set-plan-bulk', { identifiers: ['t2@school.com'], plan: 'term' });
+    check('bulk: needs the admin key', r.status === 403);
+    dbx.close();
+
     console.log('Password change, admin tools, delete');
     r = await call('POST', '/api/me/password', { oldPassword: 'goodpass123', newPassword: 'brandnewpass9' }, token);
     check('change password', r.status === 200 && r.body.token);
@@ -227,7 +319,7 @@ async function call(method, p, body, token, admin) {
     r = await call('POST', '/api/auth/login', { identifier: 'okon@example.com', password: 'resetbyadmin1' });
     check('login with reset password', r.status === 200);
     r = await call('GET', '/api/admin/stats', null, null, true);
-    check('admin stats', r.status === 200 && r.body.users === 2 && r.body.generationsLast7Days >= 6 && r.body.paidUsersNow === 1, r.body);
+    check('admin stats', r.status === 200 && r.body.users === 5 && r.body.generationsLast7Days >= 6 && r.body.paidUsersNow === 4, r.body);
     r = await call('GET', '/api/admin/users?q=ade', null, null, true);
     check('admin user search', r.status === 200 && r.body.users.length === 1);
     r = await call('DELETE', '/api/library/' + noteId, null, newToken);

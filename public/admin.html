@@ -45,10 +45,22 @@
     <h2>Give a user a paid plan (or set back to free)</h2>
     <div class="row">
       <div><label>Their email or phone</label><input id="pIdent"></div>
-      <div><label>Plan</label><select id="pPlan"><option>monthly</option><option>term</option><option>free</option></select></div>
+      <div><label>Plan</label><select id="pPlan"><option value="monthly">monthly (30 days)</option><option value="term">term (91 days)</option><option value="year">year (365 days)</option><option value="free">free</option></select></div>
       <div><label>Days to add</label><input id="pDays" value="30"></div>
     </div>
     <button id="btnPlan">Save plan</button>
+  </div>
+  <div class="card">
+    <h2>School licence: give many teachers a plan at once</h2>
+    <p style="color:var(--mute);font-size:.9rem;margin:0">Paste the teachers' emails or phone numbers, one per line. Each must already have an account.</p>
+    <label>Emails or phone numbers</label><textarea id="bIdents" rows="6" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit"></textarea>
+    <div class="row">
+      <div><label>Plan</label><select id="bPlan"><option value="term">term (91 days)</option><option value="monthly">monthly (30 days)</option><option value="year">year (365 days)</option></select></div>
+      <div><label>Days (leave empty for the plan's usual length)</label><input id="bDays" placeholder="e.g. 91"></div>
+      <div></div>
+    </div>
+    <button id="btnBulk">Give this plan to all of them</button>
+    <div id="bulkOut" style="font-size:.88rem;margin-top:8px"></div>
   </div>
   <div class="card">
     <h2>Reset a user's password</h2>
@@ -112,6 +124,17 @@ $('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats()
 $('btnUsers').onclick = async () => { try { await loadUsers(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnPlan').onclick = async () => { try { const r = await api('POST', '/api/admin/set-plan', { identifier: $('pIdent').value, plan: $('pPlan').value, days: Number($('pDays').value) }); msg('Saved: ' + r.user.name + ' is now on the ' + r.user.plan + ' plan' + (r.user.planExpiresAt ? ' until ' + new Date(r.user.planExpiresAt).toLocaleDateString() : '') + '.'); await loadUsers(); } catch (e) { msg(e.message, true); } };
 $('btnDel').onclick = async () => { try { if ($('xOk').value.trim() !== 'DELETE') throw new Error('Type DELETE in the box to confirm.'); await api('POST', '/api/admin/delete-user', { identifier: $('xIdent').value }); msg('Account deleted.'); $('xIdent').value = ''; $('xOk').value = ''; await loadUsers(); } catch (e) { msg(e.message, true); } };
+const PLAN_DAYS = { monthly: 30, term: 91, year: 365, free: '' };
+$('pPlan').onchange = () => { $('pDays').value = PLAN_DAYS[$('pPlan').value]; };
+$('btnBulk').onclick = async () => {
+  try {
+    const body = { identifiers: $('bIdents').value, plan: $('bPlan').value };
+    if ($('bDays').value.trim()) body.days = Number($('bDays').value);
+    const r = await api('POST', '/api/admin/set-plan-bulk', body);
+    $('bulkOut').innerHTML = '<b>' + r.done + ' done, ' + r.failed + ' not done.</b>' + (r.failed ? '<br><span style="color:var(--err)">' + r.results.filter((x) => !x.ok).map((x) => esc(x.identifier) + ': ' + esc(x.error)).join('<br>') + '</span>' : '');
+    msg(''); await loadUsers();
+  } catch (e) { msg(e.message, true); }
+};
 $('btnReset').onclick = async () => { try { await api('POST', '/api/admin/reset-password', { identifier: $('rIdent').value, newPassword: $('rPw').value }); msg('Password reset. Tell the teacher the new password.'); $('rPw').value = ''; } catch (e) { msg(e.message, true); } };
 </script>
 </body>

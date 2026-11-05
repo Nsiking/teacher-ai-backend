@@ -150,3 +150,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); out
 .seg button.on.sL { background: #d97706; border-color: #d97706; color: #fff; }
 .sc-in { width: 96px; flex: 0 0 96px; text-align: center; }
 .doc + .cmt, .cmt + .doc { margin-top: 10px; }
+
+/* plans */
+.plan { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.plan-r { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.plan-r b { font-size: 1.05rem; }
+.perks { margin: 8px 0 12px; padding-left: 20px; font-size: .92rem; }
+.perks li { margin: 3px 0; }
+.item.locked { opacity: .7; }
+a.btn { text-decoration: none; }

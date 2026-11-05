@@ -103,7 +103,7 @@ function publicUser(u) {
 }
 function usageInfo(u) {
   const plan = plans.effective(u);
-  return { used: plans.used(u.id), limit: plans.dailyLimit(plan), day: plans.today() };
+  return { used: plans.used(u.id), limit: plans.dailyLimit(plan), monthlyUsed: plans.monthlyUsed(u.id), monthlyLimit: plans.monthlyLimit(plan), day: plans.today() };
 }
 function sessionPayload(u) {
   return { token: auth.signToken(u), user: publicUser(u), usage: usageInfo(u) };
@@ -136,8 +136,10 @@ add('GET', '/api/meta', () => ({
   classes: prompts.CLASSES,
   terms: prompts.TERMS,
   kinds: Object.keys(prompts.builders),
-  limits: { free: plans.FREE_LIMIT, paid: plans.PAID_LIMIT },
+  limits: { free: plans.FREE_DAILY, paid: plans.PAID_DAILY, freeMonthly: plans.FREE_MONTHLY },
   plans: ['free', ...plans.PAID_PLANS],
+  plansInfo: plans.PLAN_INFO,
+  classLimits: plans.LIMITS,
 }));
 
 add('POST', '/api/auth/signup', (ctx) => {
@@ -195,7 +197,12 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
   const spec = def.build(ctx.body, { plan, maxPupils: plans.maxPupils(plan), maxAnswers: plans.maxAnswers(plan) });
   rateLimit(`gen:${user.id}`, parseInt(process.env.GEN_PER_MINUTE, 10) || 6, 60 * 1000);
   const limit = plans.dailyLimit(plan);
-  if (!plans.reserve(user.id, limit)) {
+  const mLimit = plans.monthlyLimit(plan);
+  const got = plans.reserve(user.id, limit, mLimit);
+  if (!got.ok && got.reason === 'month') {
+    throw new HttpError(429, `You have used all ${mLimit} free generations for this month. They reset on the 1st, or upgrade to Teacher Plus for more.`, 'LIMIT_REACHED_MONTH');
+  }
+  if (!got.ok) {
     throw new HttpError(429, `You have used all ${limit} generations for today. They reset at midnight, or upgrade for more.`, 'LIMIT_REACHED');
   }
 
@@ -237,6 +244,15 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
 });
 
 // ------------------------------------------------------------------ library
+// On the free plan only the newest N items can be opened. Older ones are locked, never deleted.
+function openableIds(user) {
+  const lim = plans.libraryLimit(plans.effective(user));
+  if (!lim) return null;
+  return new Set(db.prepare('SELECT id FROM items WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?').all(user.id, lim).map((r) => r.id));
+}
+function lockedError() {
+  return new HttpError(403, 'This older item is locked on the free plan. Upgrade to Teacher Plus to open it.', 'LIBRARY_LOCKED');
+}
 add('GET', '/api/library', { auth: true }, (ctx) => {
   const limit = Math.min(Math.max(parseInt(ctx.query.limit, 10) || 50, 1), 100);
   const offset = Math.max(parseInt(ctx.query.offset, 10) || 0, 0);
@@ -244,16 +260,26 @@ add('GET', '/api/library', { auth: true }, (ctx) => {
   const rows = kind
     ? db.prepare('SELECT * FROM items WHERE user_id = ? AND kind = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?').all(ctx.user.id, kind, limit, offset)
     : db.prepare('SELECT * FROM items WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?').all(ctx.user.id, limit, offset);
-  return { items: rows.map((r) => itemRow(r, false)) };
+  const open = openableIds(ctx.user);
+  const total = db.prepare('SELECT COUNT(*) c FROM items WHERE user_id = ?').get(ctx.user.id).c;
+  return {
+    items: rows.map((r) => Object.assign(itemRow(r, false), { locked: open ? !open.has(r.id) : false })),
+    lockedCount: open ? Math.max(0, total - open.size) : 0,
+    libraryLimit: plans.libraryLimit(plans.effective(ctx.user)),
+  };
 });
 add('GET', '/api/library/:id', { auth: true }, (ctx) => {
   const r = db.prepare('SELECT * FROM items WHERE id = ? AND user_id = ?').get(Number(ctx.params.id), ctx.user.id);
   if (!r) throw new HttpError(404, 'Item not found.');
+  const open = openableIds(ctx.user);
+  if (open && !open.has(r.id)) throw lockedError();
   return itemRow(r, true);
 });
 add('PUT', '/api/library/:id', { auth: true }, (ctx) => {
   const r = db.prepare('SELECT * FROM items WHERE id = ? AND user_id = ?').get(Number(ctx.params.id), ctx.user.id);
   if (!r) throw new HttpError(404, 'Item not found.');
+  const openForEdit = openableIds(ctx.user);
+  if (openForEdit && !openForEdit.has(r.id)) throw lockedError();
   const title = ctx.body.title !== undefined ? text(ctx.body.title, { name: 'Title', required: true, max: 150 }) : r.title;
   let content = r.content;
   if (ctx.body.content !== undefined) {
@@ -298,22 +324,42 @@ add('GET', '/api/admin/users', { admin: true }, (ctx) => {
     : db.prepare('SELECT * FROM users ORDER BY id DESC LIMIT ?').all(limit);
   return { users: rows.map((u) => ({ ...publicUser(u), usedToday: plans.used(u.id) })) };
 });
-add('POST', '/api/admin/set-plan', { admin: true }, (ctx) => {
-  const user = auth.findByIdentifier(ctx.body.identifier);
-  if (!user) throw new HttpError(404, 'No user with that email or phone.');
-  const plan = String(ctx.body.plan || '');
+// Gives a user a plan. Days are added after the current expiry if they are already on a paid plan.
+function applyPlan(user, plan, daysIn) {
   if (plan === 'free') {
     db.prepare("UPDATE users SET plan = 'free', plan_expires_at = NULL WHERE id = ?").run(user.id);
   } else if (plans.PAID_PLANS.includes(plan)) {
-    const days = Number(ctx.body.days);
+    const days = daysIn === undefined || daysIn === null || daysIn === '' ? plans.PLAN_INFO[plan].days : Number(daysIn);
     if (!Number.isInteger(days) || days < 1 || days > 400) throw new HttpError(400, 'Days must be a whole number from 1 to 400.');
-    // extend from the later of now or the current expiry
     const base = Math.max(Date.now(), plans.isPaid(plans.effective(user)) ? user.plan_expires_at : 0);
     db.prepare('UPDATE users SET plan = ?, plan_expires_at = ? WHERE id = ?').run(plan, base + days * 86400000, user.id);
   } else {
-    throw new HttpError(400, 'Plan must be free, monthly or term.');
+    throw new HttpError(400, 'Plan must be free, monthly, term or year.');
   }
-  return { ok: true, user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)) };
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+}
+add('POST', '/api/admin/set-plan', { admin: true }, (ctx) => {
+  const user = auth.findByIdentifier(ctx.body.identifier);
+  if (!user) throw new HttpError(404, 'No user with that email or phone.');
+  return { ok: true, user: publicUser(applyPlan(user, String(ctx.body.plan || ''), ctx.body.days)) };
+});
+// School licences: give many teachers the same plan at once.
+add('POST', '/api/admin/set-plan-bulk', { admin: true }, (ctx) => {
+  const plan = String(ctx.body.plan || '');
+  if (plan !== 'free' && !plans.PAID_PLANS.includes(plan)) throw new HttpError(400, 'Plan must be free, monthly, term or year.');
+  let list = ctx.body.identifiers;
+  if (typeof list === 'string') list = list.split(/[\r\n,;]+/);
+  if (!Array.isArray(list)) throw new HttpError(400, 'Give a list of emails or phone numbers.');
+  list = list.map((x) => String(x).trim()).filter(Boolean);
+  if (!list.length) throw new HttpError(400, 'Give at least one email or phone number.');
+  if (list.length > 200) throw new HttpError(400, 'Up to 200 teachers at a time.');
+  const results = list.map((identifier) => {
+    const user = auth.findByIdentifier(identifier);
+    if (!user) return { identifier, ok: false, error: 'No account with that email or phone.' };
+    try { const u = applyPlan(user, plan, ctx.body.days); return { identifier, ok: true, name: u.name, planExpiresAt: plan === 'free' ? null : u.plan_expires_at }; }
+    catch (e) { return { identifier, ok: false, error: e.message }; }
+  });
+  return { ok: true, done: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
 });
 add('GET', '/api/admin/backup', { admin: true }, async (ctx) => backup.status(ctx.query.list === '1'));
 add('POST', '/api/admin/backup/run', { admin: true }, async () => {
