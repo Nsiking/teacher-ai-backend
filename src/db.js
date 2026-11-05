@@ -16,6 +16,24 @@ const dataDir = process.env.DATA_DIR && process.env.DATA_DIR.trim()
   : path.join(__dirname, '..', 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
+// A restore prepared by scripts/restore.js is applied here, before the database is opened.
+(function applyPendingRestore() {
+  const pending = path.join(dataDir, 'restore-pending.db');
+  const live = path.join(dataDir, 'teacher.db');
+  if (!fs.existsSync(pending)) return;
+  let head = Buffer.alloc(15);
+  try { const fd = fs.openSync(pending, 'r'); fs.readSync(fd, head, 0, 15, 0); fs.closeSync(fd); } catch (e) { head = Buffer.alloc(15); }
+  if (head.toString('utf8') !== 'SQLite format 3') {
+    fs.renameSync(pending, path.join(dataDir, 'restore-pending.invalid'));
+    console.error('restore-pending.db is not a valid database. It was renamed to restore-pending.invalid and ignored.');
+    return;
+  }
+  if (fs.existsSync(live)) fs.renameSync(live, path.join(dataDir, 'teacher.db.before-restore-' + Date.now()));
+  for (const ext of ['-wal', '-shm']) { try { fs.rmSync(live + ext, { force: true }); } catch (e) { /* ignore */ } }
+  fs.renameSync(pending, live);
+  console.log('Database restored from restore-pending.db. The previous database was kept as teacher.db.before-restore-*');
+})();
+
 const db = new DatabaseSync(path.join(dataDir, 'teacher.db'));
 db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA busy_timeout = 5000;');

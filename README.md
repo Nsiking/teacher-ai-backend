@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 5)
+# SmartClass Teacher AI - Backend + teacher app screens (version 7)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -61,6 +61,20 @@ at the top of public/app.js.
 Use these three web addresses in the Play Console (Privacy policy URL and the account deletion URL).
 Contact email shown on them: support@smartclassaiacademy.com
 Admin can also delete an account from /admin (for requests that come by email).
+
+## Nightly backups (Cloudflare R2)
+The database is copied to R2 every night after 2:00 am Nigerian time, and 30 days are kept.
+Set these in the Render Environment tab (copy the values from your other SmartClass services):
+  R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET (smartclass-backups)
+Optional: R2_BACKUP_PREFIX (default teacher-ai-backups/), BACKUP_KEEP_DAYS (default 30).
+The API token needs "Object Read & Write" on that bucket. Keep the bucket PRIVATE.
+Check it on /admin: the "Database backups" card, with a "Back up now" button.
+To restore (Render > this service > Shell):
+  node scripts/restore.js --list          shows the backups
+  node scripts/restore.js --latest        prepares the newest backup
+  node scripts/restore.js --key NAME      prepares one backup
+Then restart the service. The old database is kept as teacher.db.before-restore-<time>.
+Test it:  node tests/backup-test.js
 
 ## Main addresses (for the Android app)
 POST /api/auth/signup        POST /api/auth/login        GET /api/me

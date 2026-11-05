@@ -35,6 +35,13 @@
   </div>
   <div class="card"><h2>Stats</h2><div id="stats">Not loaded yet.</div></div>
   <div class="card">
+    <h2>Database backups</h2>
+    <div id="bkStatus" style="font-size:.92rem">Not loaded yet.</div>
+    <button id="btnBkRun">Back up now</button>
+    <button id="btnBkList">Show recent backups</button>
+    <div id="bkList" style="font-size:.85rem;margin-top:8px;color:var(--mute)"></div>
+  </div>
+  <div class="card">
     <h2>Give a user a paid plan (or set back to free)</h2>
     <div class="row">
       <div><label>Their email or phone</label><input id="pIdent"></div>
@@ -89,7 +96,19 @@ async function loadUsers() {
   $('users').innerHTML = '<table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Plan</th><th>Expires</th><th>Used today</th><th>Joined</th></tr>' +
     r.users.map((u) => '<tr><td>' + esc(u.name) + '</td><td>' + esc(u.email) + '</td><td>' + esc(u.phone) + '</td><td>' + esc(u.plan) + '</td><td>' + (u.planExpiresAt ? new Date(u.planExpiresAt).toLocaleDateString() : '') + '</td><td>' + u.usedToday + '</td><td>' + new Date(u.createdAt).toLocaleDateString() + '</td></tr>').join('') + '</table>';
 }
-$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); msg(''); } catch (e) { msg(e.message, true); } };
+function fmtT(ms) { return ms ? new Date(ms).toLocaleString() : 'never'; }
+function kb(n) { return n ? Math.round(n / 1024) + ' KB' : ''; }
+async function loadBackup(withList) {
+  const b = await api('GET', '/api/admin/backup' + (withList ? '?list=1' : ''));
+  if (!b.enabled) { $('bkStatus').innerHTML = '<b style="color:var(--err)">Backups are OFF.</b> Add R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET in the Render Environment tab.'; $('bkList').textContent = ''; return; }
+  $('bkStatus').innerHTML = '<b style="color:var(--ok,#15803d)">Backups are ON.</b> ' + esc(b.schedule) + '. Folder: ' + esc(b.bucket + '/' + b.prefix) + ' (keeps ' + b.keepDays + ' days).<br>Last good backup: <b>' + esc(fmtT(b.lastSuccessAt)) + '</b>' + (b.lastSize ? ' (' + kb(b.lastSize) + ')' : '') +
+    (b.lastError ? '<br><span style="color:var(--err)">Last problem: ' + esc(b.lastError) + ' (' + esc(fmtT(b.lastErrorAt)) + ')</span>' : '') +
+    (b.retentionError ? '<br><span style="color:var(--err)">Cleaning old backups failed: ' + esc(b.retentionError) + '</span>' : '');
+  if (withList) $('bkList').innerHTML = b.listError ? esc(b.listError) : (b.recent && b.recent.length ? b.recent.map((o) => esc(o.key) + ' &middot; ' + kb(o.size)).join('<br>') : 'No backups in the folder yet.');
+}
+$('btnBkList').onclick = async () => { try { await loadBackup(true); } catch (e) { msg(e.message, true); } };
+$('btnBkRun').onclick = async () => { msg('Backing up... this can take a few seconds.'); try { const r = await api('POST', '/api/admin/backup/run'); msg('Backup saved: ' + r.key); await loadBackup(true); } catch (e) { msg(e.message, true); try { await loadBackup(false); } catch (x) {} } };
+$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); await loadBackup(false); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnUsers').onclick = async () => { try { await loadUsers(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnPlan').onclick = async () => { try { const r = await api('POST', '/api/admin/set-plan', { identifier: $('pIdent').value, plan: $('pPlan').value, days: Number($('pDays').value) }); msg('Saved: ' + r.user.name + ' is now on the ' + r.user.plan + ' plan' + (r.user.planExpiresAt ? ' until ' + new Date(r.user.planExpiresAt).toLocaleDateString() : '') + '.'); await loadUsers(); } catch (e) { msg(e.message, true); } };
 $('btnDel').onclick = async () => { try { if ($('xOk').value.trim() !== 'DELETE') throw new Error('Type DELETE in the box to confirm.'); await api('POST', '/api/admin/delete-user', { identifier: $('xIdent').value }); msg('Account deleted.'); $('xIdent').value = ''; $('xOk').value = ''; await loadUsers(); } catch (e) { msg(e.message, true); } };

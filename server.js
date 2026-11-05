@@ -10,6 +10,7 @@ const auth = require('./src/auth');
 const plans = require('./src/plans');
 const ai = require('./src/ai');
 const prompts = require('./src/prompts');
+const backup = require('./src/backup');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const MAX_BODY = 300 * 1024;
@@ -314,6 +315,11 @@ add('POST', '/api/admin/set-plan', { admin: true }, (ctx) => {
   }
   return { ok: true, user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)) };
 });
+add('GET', '/api/admin/backup', { admin: true }, async (ctx) => backup.status(ctx.query.list === '1'));
+add('POST', '/api/admin/backup/run', { admin: true }, async () => {
+  try { return Object.assign({ ok: true }, await backup.runBackup('manual')); }
+  catch (e) { throw new HttpError(/not set up/.test(e.message) ? 400 : 502, 'Backup failed: ' + e.message, 'BACKUP_FAILED'); }
+});
 add('POST', '/api/admin/delete-user', { admin: true }, (ctx) => {
   const user = auth.findByIdentifier(ctx.body.identifier);
   if (!user) throw new HttpError(404, 'No user with that email or phone.');
@@ -396,6 +402,7 @@ server.listen(PORT, () => {
   const mode = process.env.AI_MOCK === '1' ? 'TEST MODE (fake AI answers)' : (process.env.ANTHROPIC_API_KEY ? 'REAL AI' : 'NO AI KEY SET');
   console.log(`SmartClass Teacher AI backend running on port ${PORT} | AI: ${mode}`);
   if (!process.env.ADMIN_KEY) console.log('Note: ADMIN_KEY is not set, so /admin is switched off.');
+  backup.startScheduler();
 });
 
 process.on('SIGTERM', () => { server.close(() => process.exit(0)); });
