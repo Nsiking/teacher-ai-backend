@@ -15,11 +15,13 @@
   var authMode = 'login';
   var KINDS = {
     'lesson-note': { code: 'lesson_note', label: 'Lesson Note', icon: '📘', blurb: 'Full note in the Nigerian format', busy: ['Planning your lesson…', 'Writing the objectives…', 'Building the presentation steps…', 'Preparing the board summary…'] },
+    'lesson-plan': { code: 'lesson_plan', label: 'Lesson Plan', icon: '📋', blurb: 'Timed plan, stage by stage', busy: ['Setting the objectives…', 'Planning the stages and timing…', 'Adding support and extension…', 'Preparing the evaluation…'] },
     'scheme-of-work': { code: 'scheme_of_work', label: 'Scheme of Work', icon: '🗓️', blurb: 'A full term plan, week by week', busy: ['Planning the term…', 'Spreading the topics across the weeks…', 'Writing objectives for each week…', 'Adding activities and materials…'] },
     'questions': { code: 'questions', label: 'Questions', icon: '📝', blurb: 'Test or exam with answer key', busy: ['Setting the questions…', 'Checking the options…', 'Writing the marking guide…'] },
     'worksheet': { code: 'worksheet', label: 'Worksheet', icon: '🧩', blurb: 'Printable classroom activities', busy: ['Designing the activities…', 'Adding answer spaces…', 'Writing the answer key…'] },
     'marking': { code: 'marking', label: 'Marking Assistant', icon: '✅', blurb: 'Suggested marks and feedback', busy: ['Reading the answers…', 'Comparing with the marking guide…', 'Giving marks and feedback…'] },
     'report-comments': { code: 'report_comments', label: 'Report Comments', icon: '💬', blurb: 'Comments for the whole class', busy: ['Reading the scores…', 'Writing each comment…', 'Polishing the wording…'] }
+    ,'timetable': { code: 'timetable', label: 'Time-Table', icon: '🕒', blurb: 'Your weekly periods and class timetables', route: 'timetable', busy: [] }
   };
   var CODE_TO_KEY = {};
   Object.keys(KINDS).forEach(function (k) { CODE_TO_KEY[KINDS[k].code] = k; });
@@ -100,7 +102,7 @@
   function dropItem(id) { var c = cacheItems(); delete c[id]; jset('tt_items', c); }
   function clearSession() {
     S.token = ''; S.user = null; S.usage = null;
-    ['tt_token', 'tt_items', 'tt_list', 'tt_user', 'tt_usage'].forEach(function (k) { localStorage.removeItem(k); });
+    ['tt_token', 'tt_items', 'tt_list', 'tt_user', 'tt_usage', 'tt_slots', 'tt_make'].forEach(function (k) { localStorage.removeItem(k); });
   }
   function saveSession(s) {
     if (s.token) { S.token = s.token; localStorage.setItem('tt_token', s.token); }
@@ -175,6 +177,7 @@
     switch (name) {
       case 'new': return viewForm(arg);
       case 'item': return viewItem(Number(arg));
+      case 'timetable': return TT.views.timetable ? TT.views.timetable(parts) : viewHome();
       case 'classes': return TT.views.classes ? TT.views.classes(parts) : viewHome();
       case 'class': return TT.views.class ? TT.views.class(parts) : viewHome();
       case 'textbooks': return viewTextbooks();
@@ -227,11 +230,12 @@
     if (/^(mr|mrs|miss|ms|dr|engr|prof|pastor|rev|chief|sir|madam|mal|alh|alhaji|hajia|barr|hon)\.?$/i.test(first) && words[1]) first = words[0] + ' ' + words[1];
     var keys = Object.keys(KINDS);
     var tiles = keys.map(function (k, i) {
-      return '<button class="tile' + (i === keys.length - 1 && keys.length % 2 === 1 ? ' full' : '') + '" data-go="new/' + k + '"><span class="ico">' + KINDS[k].icon + '</span><span style="display:flex;flex-direction:column;gap:4px"><b>' + KINDS[k].label + '</b><span class="d">' + KINDS[k].blurb + '</span></span></button>';
+      return '<button class="tile' + (i === keys.length - 1 && keys.length % 2 === 1 ? ' full' : '') + '" data-go="' + (KINDS[k].route || 'new/' + k) + '"><span class="ico">' + KINDS[k].icon + '</span><span style="display:flex;flex-direction:column;gap:4px"><b>' + KINDS[k].label + '</b><span class="d">' + KINDS[k].blurb + '</span></span></button>';
     }).join('');
     shell(
       '<h1>Good day, ' + esc(first) + '</h1><p class="sub">What do you want to prepare today?</p>' +
       (S.installEvt ? '<div class="banner"><span>Install this app on your phone for quick access.</span><button class="btn small" data-act="install">Install</button></div>' : '') +
+      '<div id="today-box"></div>' +
       '<div class="tiles">' + tiles + '</div>' +
       '<div class="card" style="margin-top:14px"><div class="kv" style="padding-top:0"><span>Today</span><b>' + left + ' of ' + u.limit + ' left</b></div>' +
       (u.monthlyLimit ? '<div class="kv"><span>This month</span><b>' + Math.max(0, u.monthlyLimit - (u.monthlyUsed || 0)) + ' of ' + u.monthlyLimit + ' left</b></div>' : '') +
@@ -241,6 +245,7 @@
       { nav: 'home' }
     );
     loadRecent();
+    if (TT.todayCard) TT.todayCard();
   }
   async function loadRecent() {
     var box = $('#recent'); if (!box) return;
@@ -315,11 +320,12 @@
       body =
         '<label for="f-subject">Subject</label><input id="f-subject" maxlength="60" placeholder="e.g. Mathematics" value="' + esc(prefs.subject || '') + '">' +
         '<div class="row2 stack"><div><label for="f-class">Class</label><select id="f-class">' + opts(classes, cls) + '</select></div>' +
-        (kind === 'lesson-note' ? '<div><label for="f-term">Term</label><select id="f-term">' + opts(terms, term) + '</select></div>' : '<div></div>') + '</div>' +
+        ((kind === 'lesson-note' || kind === 'lesson-plan') ? '<div><label for="f-term">Term</label><select id="f-term">' + opts(terms, term) + '</select></div>' : '<div></div>') + '</div>' +
         '<label for="f-topic">Topic</label><input id="f-topic" maxlength="150" placeholder="e.g. Algebraic expressions">';
-      if (kind === 'lesson-note') {
+      if (kind === 'lesson-note' || kind === 'lesson-plan') {
         body += '<div class="row2 stack"><div><label for="f-week">Week (optional)</label><input id="f-week" maxlength="20" placeholder="e.g. Week 3"></div>' +
           '<div><label for="f-duration">Duration (minutes)</label><input id="f-duration" inputmode="numeric" value="40"></div></div>';
+        if (kind === 'lesson-plan') body += '<label for="f-method">Teaching method (optional)</label><input id="f-method" maxlength="100" placeholder="e.g. group work, demonstration">';
       } else if (kind === 'questions') {
         body += '<div class="row2 stack"><div><label for="f-type">Type</label><select id="f-type"><option value="mixed">Objective + theory</option><option value="objective">Objective only</option><option value="theory">Theory only</option></select></div>' +
           '<div><label for="f-diff">Difficulty</label><select id="f-diff"><option value="mixed">Mixed</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>' +
@@ -329,7 +335,7 @@
         body += '<label for="f-act">Number of activities</label><input id="f-act" inputmode="numeric" value="10">';
       }
       body += '<label for="f-extras">Anything else? (optional)</label><input id="f-extras" maxlength="400" placeholder="' +
-        (kind === 'lesson-note' ? 'e.g. include group work, use local examples' : kind === 'questions' ? 'e.g. WAEC style, include calculations' : 'e.g. include a puzzle') + '">';
+        ((kind === 'lesson-note' || kind === 'lesson-plan') ? 'e.g. include group work, use local examples' : kind === 'questions' ? 'e.g. WAEC style, include calculations' : 'e.g. include a puzzle') + '">';
     }
     if (TB_KINDS.indexOf(kind) > -1) { selTb = []; tbAll = []; tbShowAll = false; body = body.replace('<label for="f-extras">', tbPickerHtml() + '<label for="f-extras">'); }
     shell(
@@ -379,7 +385,7 @@
     btn.disabled = false;
   }
   // ---------------------------------------------------------------- textbooks
-  var TB_KINDS = ['lesson-note', 'scheme-of-work', 'questions', 'worksheet'];
+  var TB_KINDS = ['lesson-note', 'lesson-plan', 'scheme-of-work', 'questions', 'worksheet'];
   var selTb = [], tbAll = [], tbShowAll = false, tbTimer = null;
   function tbPickerHtml() {
     return '<div class="tb-box"><label>Textbook references (optional)</label>' +
@@ -518,7 +524,8 @@
     jset('tt_prefs', Object.assign(jget('tt_prefs', {}), { subject: v('f-subject'), className: v('f-class'), term: v('f-term') || undefined }));
     var b = { subject: v('f-subject'), className: v('f-class'), topic: v('f-topic'), extras: v('f-extras') };
     if (TB_KINDS.indexOf(kind) > -1) b.textbookIds = selTb.slice();
-    if (kind === 'lesson-note') { b.term = v('f-term'); b.week = v('f-week'); b.duration = v('f-duration'); }
+    if (kind === 'lesson-note' || kind === 'lesson-plan') { b.term = v('f-term'); b.week = v('f-week'); b.duration = v('f-duration'); }
+    if (kind === 'lesson-plan') b.method = v('f-method');
     if (kind === 'questions') { b.type = v('f-type'); b.difficulty = v('f-diff'); if (b.type !== 'theory') b.objectiveCount = v('f-obj'); if (b.type !== 'objective') b.theoryCount = v('f-th'); }
     if (kind === 'worksheet') { b.activityCount = v('f-act'); }
     return b;
@@ -621,6 +628,7 @@
       '<button class="btn small alt" data-act="wordItem">Word</button>' +
       (IS_NATIVE ? '' : '<button class="btn small alt" data-act="printitem">Print / PDF</button>') +
       '<button class="btn small alt" data-act="edititem">Edit</button>' +
+      (it.kind === 'timetable' && it.meta ? '<button class="btn small alt" data-act="ttagain">Another arrangement</button>' : '') +
       '<button class="btn small danger" data-act="deleteitem">Delete</button></div>' +
       '<div id="item-body">' + itemBodyHtml(it) + '</div>' +
       '<p class="hint no-print">Saved in your library. ' + fmtDate(it.createdAt) + '</p>',
@@ -654,7 +662,7 @@
       ? '<h1>' + esc(it.title) + '</h1>' + parseComments(it.content).map(function (c) { return '<p><b>' + esc(c.name) + '</b><br>' + esc(c.comment) + '</p>'; }).join('')
       : window.md(it.content);
     if (!isPaid()) html += '<p style="margin-top:24pt;color:#777777;font-size:9pt">Made with SmartClass Teacher AI (free plan)</p>';
-    var land = it.kind === 'scheme_of_work';
+    var land = it.kind === 'scheme_of_work' || it.kind === 'timetable';
     var doc = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>' + esc(it.title) +
       '</title><style>' + (land ? '@page WordSection1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:36pt}div.WordSection1{page:WordSection1}' : '') +
       'body{font-family:Calibri,Arial,sans-serif;font-size:' + (land ? '10' : '12') + 'pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:4px;vertical-align:top}th{background:#eee}h1{text-align:center;font-size:16pt}h2{font-size:13pt}</style></head><body><div class="WordSection1">' + html + '</div></body></html>';
@@ -701,7 +709,7 @@
   }
   function drawLibrary() {
     var items = window.__libItems || [];
-    var chips = [['all', 'All'], ['lesson_note', 'Lesson notes'], ['scheme_of_work', 'Schemes'], ['questions', 'Questions'], ['marking', 'Marking'], ['worksheet', 'Worksheets'], ['report_comments', 'Comments']];
+    var chips = [['all', 'All'], ['lesson_note', 'Lesson notes'], ['lesson_plan', 'Lesson plans'], ['scheme_of_work', 'Schemes'], ['timetable', 'Timetables'], ['questions', 'Questions'], ['marking', 'Marking'], ['worksheet', 'Worksheets'], ['report_comments', 'Comments']];
     if ($('#chips')) $('#chips').innerHTML = chips.map(function (c) { return '<button class="chip' + (libFilter === c[0] ? ' on' : '') + '" data-act="filter" data-v="' + c[0] + '">' + c[1] + '</button>'; }).join('');
     if ($('#lib-banner')) $('#lib-banner').innerHTML = window.__libLocked
       ? '<div class="banner"><span>' + window.__libLocked + ' older item' + (window.__libLocked === 1 ? ' is' : 's are') + ' locked on the free plan. Nothing is deleted. Upgrade to Teacher Plus to open them.</span><button class="btn small" data-act="seeplans">See plans</button></div>' : '';
@@ -820,7 +828,7 @@
     wordItem: function () { downloadWord(currentItem); },
     printitem: function () {
       var st = null;
-      if (currentItem && currentItem.kind === 'scheme_of_work') { st = document.createElement('style'); st.textContent = '@page{size:landscape}'; document.head.appendChild(st); }
+      if (currentItem && (currentItem.kind === 'scheme_of_work' || currentItem.kind === 'timetable')) { st = document.createElement('style'); st.textContent = '@page{size:landscape}'; document.head.appendChild(st); }
       window.print();
       if (st) setTimeout(function () { st.remove(); }, 1500);
     },
@@ -830,6 +838,15 @@
     deleteitem: confirmDelete,
     dodelete: doDelete,
     closemodal: closeModal,
+    ttagain: async function (btn) {
+      var m = currentItem && currentItem.meta; if (!m) return;
+      btn.disabled = true;
+      try {
+        var body = Object.assign({}, m, { seed: Math.floor(Math.random() * 2147483647) });
+        var r = await api('POST', '/api/timetable/make', body);
+        go('#/item/' + r.id); toast('Here is another arrangement');
+      } catch (e) { toast(e.message, true); btn.disabled = false; }
+    },
     addtextbook: function () { modal(tbFormHtml(null), true); },
     savetextbook: saveTextbook,
     tbmore: function () { tbShowAll = true; drawTbList(); },
@@ -863,7 +880,17 @@
 
   Object.keys(TT.actions).forEach(function (k) { actions[k] = TT.actions[k]; });
   TT.api = api; TT.shell = shell; TT.esc = esc; TT.toast = toast; TT.modal = modal; TT.closeModal = closeModal;
-  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile;
+  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid;
+  TT.classNames = function () { return (S.meta && S.meta.classes) || []; };
+  // Fills the subject and class for the next lesson plan or note (used from the timetable).
+  TT.prefill = function (subject, className) {
+    var pr = jget('tt_prefs', {}), classes = TT.classNames();
+    pr.subject = subject || pr.subject;
+    var typed = String(className || '').toLowerCase().replace(/\s+/g, ''), best = '';
+    classes.forEach(function (c) { var k = c.toLowerCase().replace(/\s+/g, ''); if (typed.indexOf(k) === 0 && k.length > best.length) best = c; });
+    if (best) pr.className = best;
+    jset('tt_prefs', pr);
+  };
 
   document.addEventListener('click', function (e) {
     var a = e.target.closest('[data-act]');

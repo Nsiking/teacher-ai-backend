@@ -32,7 +32,7 @@
         var cells = function (r) { return r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }); };
         var head = cells(rows[0]);
         var body = rows.slice(2).map(cells);
-        out.push('<div class="tablewrap"><table' + (head.length >= 6 ? ' class="wide xwide"' : head.length >= 4 ? ' class="wide"' : '') + '><thead><tr>' + head.map(function (c) { return '<th>' + inline(c) + '</th>'; }).join('') +
+        out.push('<div class="tablewrap"><table' + (head[0] === 'Time' ? ' class="wide tt"' : head.length >= 6 ? ' class="wide xwide"' : head.length >= 4 ? ' class="wide"' : '') + '><thead><tr>' + head.map(function (c) { return '<th>' + inline(c) + '</th>'; }).join('') +
           '</tr></thead><tbody>' + body.map(function (r) {
             return '<tr>' + r.map(function (c) { return '<td>' + inline(c) + '</td>'; }).join('') + '</tr>';
           }).join('') + '</tbody></table></div>');

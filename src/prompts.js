@@ -114,6 +114,89 @@ Two or three tasks for home.`;
   };
 }
 
+// ------------------------------------------------------------------ Lesson plan
+// A lesson PLAN is the teacher's short, timed plan of how the lesson will run.
+// A lesson NOTE holds the full content the teacher teaches. They are different documents.
+function lessonPlan(b, opts) {
+  const tbs = (opts && opts.textbooks) || [];
+  const bookBlock = tbs.length ? '\n\n' + books.promptBlock(tbs) : '';
+  const subject = text(b.subject, { name: 'Subject', required: true, max: 60 });
+  const cls = text(b.className, { name: 'Class', required: true, max: 30 });
+  const topic = text(b.topic, { name: 'Topic', required: true, max: 150 });
+  const subTopic = text(b.subTopic, { name: 'Sub-topic', max: 150 });
+  const term = text(b.term, { name: 'Term', max: 20 });
+  const week = text(b.week, { name: 'Week', max: 20 });
+  const duration = int(b.duration, { name: 'Duration', min: 15, max: 180, def: 40 });
+  const count = int(b.learnersCount, { name: 'Number of learners', min: 1, max: 200, def: null });
+  const method = text(b.method, { name: 'Teaching method', max: 100 });
+  const extras = text(b.extras, { name: 'Extra requests', max: 500 });
+  const L = learners(cls);
+  const Lc = L[0].toUpperCase() + L.slice(1);
+
+  const prompt = `Prepare a complete, ready-to-use lesson plan. A lesson plan is short and practical: it shows how the lesson will run, stage by stage, with timing. It is not a full set of notes, so do not write out the full lesson content.
+
+<teacher_input>
+Subject: ${subject}
+Class: ${cls}
+Topic: ${topic}
+Sub-topic: ${subTopic || 'not given'}
+Term: ${term || 'not given'}
+Week: ${week || 'not given'}
+Duration: ${duration} minutes
+Number of ${L}: ${count || 'not given'}
+Preferred teaching method: ${method || 'not given, choose suitable methods'}
+Extra requests: ${extras || 'none'}
+</teacher_input>${bookBlock}
+
+Use exactly this structure and these headings:
+
+# LESSON PLAN
+A two-column table (Item | Details) with rows: School (........), Teacher (........), Subject, Class, Topic, Sub-topic, Term and Week, Date (........), Time (........), Duration, Number of ${L} (use the number given, otherwise ........), Average age (a sensible estimate for the class), Sex (Mixed).
+
+## Learning Objectives
+Start with: "By the end of the lesson, the ${L} should be able to:" then 3 to 4 numbered objectives that are specific, measurable and begin with action verbs.
+
+## Previous Knowledge
+One or two sentences on what the ${L} already know that links to this lesson.
+
+## Instructional Materials
+Practical materials found in an ordinary Nigerian classroom.
+
+## Reference Materials
+${tbs.length ? 'List each textbook above on its own line using its [BOOK1], [BOOK2] or [BOOK3] tag, then the NERDC curriculum. Where the contents list of a book shows this topic, add the chapter and pages exactly as given in that list (for example: Chapter 5, pp. 34 to 52). If the topic does not appear in a book\'s contents list, write: topic not found in the contents provided, please check the book.' : 'The NERDC curriculum for the subject and the approved textbook for the class. Do not invent titles.'}
+
+## Teaching Methods
+Two or three methods, each with a few words on how it will be used (for example: guided discussion, demonstration, group work, questioning).
+
+## Lesson Stages
+A table with columns: Stage | Time | Teacher's Activity | ${Lc}' Activity | Method and Aids. Rows, in this order: Introduction, Development (steps 1 to 3, one row each), Practice, Evaluation, Conclusion. Keep each cell short. The times must add up to exactly ${duration} minutes and show as numbers of minutes, for example "5 mins".
+
+## Support and Extension
+Two short lines: how to help ${L} who find the topic hard, and what to give ${L} who finish early.
+
+## Evaluation Questions
+Four questions that test the objectives, each with its answer in brackets.
+
+## Assignment
+Two short tasks for home.
+
+## Teacher's Reflection
+Leave this section for the teacher to fill in after the lesson, with these lines exactly: "What went well: ........", "What to improve: ........", "${Lc} who need extra help: ........".
+
+Rules for the table: keep cell text short, never use a line break inside a cell, and never use the | character inside a cell.`;
+
+  const stages = ['Introduction', 'Development 1', 'Development 2', 'Development 3', 'Practice', 'Evaluation', 'Conclusion'];
+  const rows = stages.map((st) => `| ${st} | 5 mins | [TEST MODE] Teacher guides | ${Lc} respond | Questioning |`).join('\n');
+  return {
+    prompt,
+    maxTokens: 3500,
+    title: `${subject} lesson plan: ${topic} (${cls})`,
+    meta: { subject, className: cls, topic, subTopic, term, week, duration, textbooks: tbs.map((t) => t.id) },
+    textbooks: tbs,
+    mock: `# LESSON PLAN\n\n| Item | Details |\n|---|---|\n| Subject | ${subject} |\n| Class | ${cls} |\n| Topic | ${topic} |\n| Duration | ${duration} minutes |\n\n## Learning Objectives\n1. State the meaning of the topic.\n2. Give two examples.\n\n## Reference Materials\n` + (tbs.length ? '- [BOOK1]' : '- NERDC curriculum') + `\n\n## Lesson Stages\n\n| Stage | Time | Teacher's Activity | ${Lc}' Activity | Method and Aids |\n|---|---|---|---|---|\n${rows}\n\n## Teacher's Reflection\nWhat went well: ........`,
+  };
+}
+
 // ------------------------------------------------------------------ Questions
 function questions(b, opts) {
   const tbs = (opts && opts.textbooks) || [];
@@ -437,6 +520,7 @@ Return ONLY a JSON array, nothing else, no code fences, in this exact form:
 
 const builders = {
   'lesson-note': { kind: 'lesson_note', build: lessonNote },
+  'lesson-plan': { kind: 'lesson_plan', build: lessonPlan },
   'scheme-of-work': { kind: 'scheme_of_work', build: schemeOfWork },
   marking: { kind: 'marking', build: marking },
   questions: { kind: 'questions', build: questions },

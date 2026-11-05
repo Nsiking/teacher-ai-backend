@@ -170,3 +170,12 @@ a.btn { text-decoration: none; }
 .modal.wide { text-align: left; max-height: 90vh; overflow-y: auto; }
 .modal.wide h3 { text-align: center; }
 .tb-contents { white-space: pre-wrap; font: .85rem/1.5 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 240px; overflow: auto; margin: 4px 0 10px; }
+
+/* timetable */
+.doc table.tt { min-width: 600px; font-size: .8rem; }
+.doc table.tt td:first-child, .doc table.tt th:first-child { white-space: nowrap; font-weight: 600; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px; }
+.row3 > * { min-width: 0; }
+.ts { border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin-bottom: 10px; background: var(--card); display: grid; gap: 8px; }
+.slot-now { background: var(--brand); color: var(--brand-ink); border-radius: 999px; padding: 2px 10px; font-size: .75rem; font-weight: 700; margin-left: 6px; }
+.item.done { opacity: .55; }

@@ -124,7 +124,7 @@ function deleteUserData(id) {
   db.prepare('DELETE FROM items WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM usage WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM gen_log WHERE user_id = ?').run(id);
-  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes']) {
+  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes', 'timetable_slots']) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id);
   }
   db.prepare('DELETE FROM textbooks WHERE owner_user_id = ?').run(id);
@@ -304,6 +304,7 @@ add('DELETE', '/api/library/:id', { auth: true }, (ctx) => {
 // ------------------------------------------------------------------ classroom record
 require('./src/classroom').register(add);
 textbooks.register(add);
+require('./src/timetable').register(add, { rateLimit });
 
 // ------------------------------------------------------------------ admin (needs ADMIN_KEY)
 add('GET', '/api/admin/stats', { admin: true }, () => {
@@ -396,6 +397,7 @@ const STATIC = {
   '/delete-account': ['delete-account.html', 'text/html; charset=utf-8'],
   '/md.js': ['md.js', 'application/javascript; charset=utf-8'],
   '/classes.js': ['classes.js', 'application/javascript; charset=utf-8'],
+  '/timetable.js': ['timetable.js', 'application/javascript; charset=utf-8'],
   '/sw.js': ['sw.js', 'application/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],

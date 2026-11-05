@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 9)
+# SmartClass Teacher AI - Backend + teacher app screens (version 10)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -64,6 +64,15 @@ library, no footer. Every number can be changed with a setting in Render (see .e
 A teacher who goes back to Free keeps all classes and pupils. Only adding more is blocked.
 Activate a plan on /admin (Give a user a paid plan). School licences: /admin > "School licence" gives many teachers
 a plan at once. A 7-day trial = give the plan for 7 days.
+
+## Lesson Plan and Time-Table
+Lesson Plan (Home): a short, timed plan: objectives, stages with teacher and learner activities, support and extension,
+evaluation, assignment and a reflection box. It uses one generation, like the other AI tools, and can cite textbooks.
+Time-Table (Home): "My timetable" is the teacher's own weekly periods. Today's lessons show on Home with Now and Next,
+and tapping one starts a lesson plan or note for that subject and class. "Class timetable" makes a balanced class
+timetable with no AI, so it is free and does not use a generation. Rules it follows: exact periods per subject, at most
+2 a day, doubles side by side and never split by a break, core subjects early, free periods last.
+Up to 80 periods per teacher (TIMETABLE_MAX_SLOTS). Test it:  node tests/timetable-test.js
 
 ## Textbook references
 Teachers add the books their school uses (title, author, publisher, edition, year, ISBN, subject, classes, and the

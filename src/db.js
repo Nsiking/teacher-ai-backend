@@ -129,6 +129,18 @@ CREATE TABLE IF NOT EXISTS textbooks (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tb_owner ON textbooks (owner_user_id);
+CREATE TABLE IF NOT EXISTS timetable_slots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  day INTEGER NOT NULL,
+  start_min INTEGER NOT NULL,
+  end_min INTEGER NOT NULL,
+  subject TEXT NOT NULL,
+  class_name TEXT NOT NULL DEFAULT '',
+  room TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_slots_user ON timetable_slots (user_id, day, start_min);
 CREATE TABLE IF NOT EXISTS scores (
   assessment_id INTEGER NOT NULL,
   pupil_id INTEGER NOT NULL,
