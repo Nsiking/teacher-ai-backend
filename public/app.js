@@ -38,10 +38,10 @@
     document.body.appendChild(t);
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.remove(); }, isErr ? 5000 : 2600);
   }
-  function modal(html) {
+  function modal(html, wide) {
     closeModal();
     var o = document.createElement('div'); o.className = 'overlay'; o.id = 'modal';
-    o.innerHTML = '<div class="modal">' + html + '</div>';
+    o.innerHTML = '<div class="modal' + (wide ? ' wide' : '') + '">' + html + '</div>';
     document.body.appendChild(o);
     return o;
   }
@@ -177,6 +177,7 @@
       case 'item': return viewItem(Number(arg));
       case 'classes': return TT.views.classes ? TT.views.classes(parts) : viewHome();
       case 'class': return TT.views.class ? TT.views.class(parts) : viewHome();
+      case 'textbooks': return viewTextbooks();
       case 'library': return viewLibrary();
       case 'account': return viewAccount();
       default: return viewHome();
@@ -330,6 +331,7 @@
       body += '<label for="f-extras">Anything else? (optional)</label><input id="f-extras" maxlength="400" placeholder="' +
         (kind === 'lesson-note' ? 'e.g. include group work, use local examples' : kind === 'questions' ? 'e.g. WAEC style, include calculations' : 'e.g. include a puzzle') + '">';
     }
+    if (TB_KINDS.indexOf(kind) > -1) { selTb = []; tbAll = []; tbShowAll = false; body = body.replace('<label for="f-extras">', tbPickerHtml() + '<label for="f-extras">'); }
     shell(
       '<h1>' + def.icon + ' ' + def.label + '</h1><p class="sub">' + def.blurb + '. It takes about a minute.</p>' +
       '<div class="card">' + body +
@@ -338,6 +340,7 @@
       { title: def.label, back: 'home' }
     );
     if (kind === 'report-comments') fillClassBox();
+    if (TB_KINDS.indexOf(kind) > -1) loadTbList();
   }
   async function fillClassBox() {
     var box = $('#cls-inner'); if (!box) return;
@@ -375,6 +378,106 @@
     } catch (e) { toast(e.message, true); }
     btn.disabled = false;
   }
+  // ---------------------------------------------------------------- textbooks
+  var TB_KINDS = ['lesson-note', 'scheme-of-work', 'questions', 'worksheet'];
+  var selTb = [], tbAll = [], tbShowAll = false, tbTimer = null;
+  function tbPickerHtml() {
+    return '<div class="tb-box"><label>Textbook references (optional)</label>' +
+      '<p class="hint" style="margin:0 0 6px">Pick the book your school uses. The AI will cite it exactly and follow its chapters.</p>' +
+      '<div id="tb-list"><p class="hint">Loading your textbooks…</p></div>' +
+      '<button type="button" class="link" data-act="addtextbook">+ Add a textbook</button></div>';
+  }
+  function tbLine(t) {
+    var bits = [t.authors]; if (t.edition) bits.push(t.edition); if (t.year) bits.push(t.year);
+    return esc(bits.join(' · '));
+  }
+  async function loadTbList() {
+    if (!$('#tb-list')) return;
+    var subj = ($('#f-subject') || {}).value || '', cls = ($('#f-class') || {}).value || '';
+    try { var r = await api('GET', '/api/textbooks?subject=' + encodeURIComponent(subj) + '&className=' + encodeURIComponent(cls)); tbAll = r.textbooks; }
+    catch (e) { if ($('#tb-list')) $('#tb-list').innerHTML = '<p class="hint">Connect to the internet to load your textbooks.</p>'; return; }
+    drawTbList();
+  }
+  function drawTbList() {
+    var box = $('#tb-list'); if (!box) return;
+    if (!tbAll.length) { box.innerHTML = '<p class="hint">No textbooks yet. Add the book your school uses, and the AI will cite it exactly.</p>'; return; }
+    var chosen = tbAll.filter(function (t) { return selTb.indexOf(t.id) > -1; });
+    var rest = tbAll.filter(function (t) { return selTb.indexOf(t.id) < 0; });
+    var list = tbShowAll ? chosen.concat(rest) : chosen.concat(rest.slice(0, Math.max(0, 5 - chosen.length)));
+    var full = selTb.length >= 3;
+    box.innerHTML = list.map(function (t) {
+      var on = selTb.indexOf(t.id) > -1;
+      return '<label class="tb"><input type="checkbox" data-tb="' + t.id + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + '><span><b>' + esc(t.title) + '</b>' +
+        '<span class="hint" style="display:block;margin:0">' + tbLine(t) + (t.verified ? ' · Verified' : ' · My book') + (t.hasContents ? ' · contents ✓' : '') + '</span></span></label>';
+    }).join('') + (tbAll.length > list.length ? '<button type="button" class="link" data-act="tbmore">Show all ' + tbAll.length + '</button>' : '');
+  }
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t && t.matches && t.matches('input[data-tb]')) {
+      var id = Number(t.getAttribute('data-tb'));
+      if (t.checked) { if (selTb.indexOf(id) < 0 && selTb.length < 3) selTb.push(id); }
+      else selTb = selTb.filter(function (x) { return x !== id; });
+      drawTbList();
+    } else if (t && t.id === 'f-class' && $('#tb-list')) loadTbList();
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'f-subject' && $('#tb-list')) { clearTimeout(tbTimer); tbTimer = setTimeout(loadTbList, 600); }
+  });
+
+  function tbFormHtml(t) {
+    t = t || {};
+    var classes = (S.meta && S.meta.classes) || [];
+    var lv = t.levels || [], all = lv[0] === 'All';
+    var boxes = classes.map(function (c) { return '<label class="chk"><input type="checkbox" class="tb-lv" value="' + esc(c) + '"' + (!all && lv.indexOf(c) > -1 ? ' checked' : '') + '> ' + esc(c) + '</label>'; }).join('');
+    function f(id, label, val, ph, max) { return '<label for="' + id + '">' + label + '</label><input id="' + id + '" maxlength="' + max + '" value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '">'; }
+    return '<h3>' + (t.id ? 'Edit textbook' : 'Add a textbook') + '</h3><div style="text-align:left">' +
+      f('tb-title', 'Title', t.title, 'Exactly as on the cover', 150) + f('tb-authors', 'Author(s)', t.authors, 'e.g. A. Writer and B. Author', 150) +
+      '<div class="row2"><div>' + f('tb-publisher', 'Publisher', t.publisher, '', 80) + '</div><div>' + f('tb-edition', 'Edition', t.edition, 'e.g. 3rd Edition', 40) + '</div></div>' +
+      '<div class="row2"><div>' + f('tb-year', 'Year', t.year, 'e.g. 2019', 4) + '</div><div>' + f('tb-isbn', 'ISBN (optional)', t.isbn, '', 20) + '</div></div>' +
+      f('tb-subject', 'Subject', t.subject || (($('#f-subject') || {}).value || ''), 'e.g. Mathematics', 60) +
+      '<label>Class(es)</label><div class="chk-row">' + boxes + '<label class="chk"><input type="checkbox" id="tb-all"' + (all ? ' checked' : '') + '> All classes</label></div>' +
+      '<label for="tb-contents">Contents list (optional)</label><textarea id="tb-contents" style="min-height:140px" placeholder="Chapter 1 | Whole numbers | pp. 1-20&#10;Chapter 2 | Fractions | pp. 21-45">' + esc(t.contents || '') + '</textarea>' +
+      '<p class="hint">Copy the chapter titles and page numbers from the contents page of your own copy. The AI uses only what you type here, so check it against the book.</p>' +
+      '<div class="err" id="tb-err"></div></div>' +
+      '<button class="btn" data-act="savetextbook"' + (t.id ? ' data-id="' + t.id + '"' : '') + '>Save textbook</button><button class="btn alt" data-act="closemodal">Cancel</button>';
+  }
+  async function saveTextbook(btn) {
+    var id = btn.getAttribute('data-id');
+    var levels = $('#tb-all').checked ? ['All'] : Array.prototype.slice.call(document.querySelectorAll('.tb-lv:checked')).map(function (c) { return c.value; });
+    var body = { title: $('#tb-title').value, authors: $('#tb-authors').value, publisher: $('#tb-publisher').value, edition: $('#tb-edition').value, year: $('#tb-year').value, isbn: $('#tb-isbn').value, subject: $('#tb-subject').value, levels: levels, contents: $('#tb-contents').value };
+    $('#tb-err').textContent = '';
+    btn.disabled = true;
+    try {
+      var r = id ? await api('PUT', '/api/textbooks/' + id, body) : await api('POST', '/api/textbooks', body);
+      closeModal(); toast('Textbook saved');
+      if ($('#tb-list')) { if (!id && selTb.length < 3) selTb.push(r.id); loadTbList(); }
+      else if ($('#tb-screen')) loadTbScreen();
+    } catch (e) { $('#tb-err').textContent = e.message; btn.disabled = false; }
+  }
+  function viewTextbooks() {
+    shell('<h1>My textbooks</h1><p class="sub">Add the books your school uses. The AI cites them exactly and follows their chapters. Books marked Verified come from SmartClass.</p>' +
+      '<div id="tb-screen"><p class="hint">Loading…</p></div><button class="btn block" data-act="addtextbook">+ Add a textbook</button>', { title: 'Textbooks', back: 'account' });
+    loadTbScreen();
+  }
+  async function loadTbScreen() {
+    var box = $('#tb-screen'); if (!box) return;
+    try {
+      var r = await api('GET', '/api/textbooks');
+      box.innerHTML = r.textbooks.length ? r.textbooks.map(function (t) {
+        return '<button class="item" data-act="tbdetail" data-id="' + t.id + '"><span class="ico">📗</span><span><div class="t">' + esc(t.title) + '</div><div class="m">' + tbLine(t) + ' · ' + esc(t.subject) + ' · ' + (t.verified ? 'Verified' : 'My book') + '</div></span></button>';
+      }).join('') : '<div class="empty">No textbooks yet. Add the first one your school uses.</div>';
+    } catch (e) { box.innerHTML = '<div class="empty">' + esc(e.offline ? 'Connect to the internet to see your textbooks.' : e.message) + '</div>'; }
+  }
+  async function showTbDetail(id) {
+    try {
+      var t = await api('GET', '/api/textbooks/' + id);
+      var cite = t.title + ', ' + t.authors + ([t.publisher, t.edition, t.year].filter(Boolean).length ? ' (' + [t.publisher, t.edition, t.year].filter(Boolean).join(', ') + ')' : '') + (t.isbn ? ', ISBN ' + t.isbn : '');
+      modal('<h3>' + esc(t.title) + '</h3><div style="text-align:left"><p class="sub">' + esc(cite) + '</p><p class="hint">' + esc(t.subject) + ' · ' + esc(t.levels.join(', ')) + (t.verified ? ' · Verified by SmartClass' : ' · Added by you') + '</p>' +
+        (t.contents ? '<label>Contents list</label><pre class="tb-contents">' + esc(t.contents) + '</pre>' : '<p class="hint">No contents list yet. Add one so the AI can cite chapters and pages.</p>') + '</div>' +
+        (t.mine ? '<button class="btn" data-act="tbedit" data-id="' + t.id + '">Edit</button><button class="btn danger" data-act="tbdelete" data-id="' + t.id + '" data-name="' + esc(t.title) + '">Delete</button>' : '') +
+        '<button class="btn alt" data-act="closemodal">Close</button>', true);
+    } catch (e) { toast(e.message, true); }
+  }
   function setPupilLimitCheck() {
     var max = isPaid() ? 40 : 5;
     return { max: max, count: document.querySelectorAll('.pupil').length };
@@ -408,12 +511,13 @@
     if (kind === 'scheme-of-work') {
       if (!v('f-subject')) return err('Please enter the subject.');
       jset('tt_prefs', Object.assign(jget('tt_prefs', {}), { subject: v('f-subject'), className: v('f-class'), term: v('f-term') }));
-      return { subject: v('f-subject'), className: v('f-class'), term: v('f-term'), weeks: v('f-weeks'), periodsPerWeek: v('f-periods'), topics: v('f-topics'), extras: v('f-extras') };
+      return { subject: v('f-subject'), className: v('f-class'), term: v('f-term'), weeks: v('f-weeks'), periodsPerWeek: v('f-periods'), topics: v('f-topics'), extras: v('f-extras'), textbookIds: selTb.slice() };
     }
     if (!v('f-subject')) return err('Please enter the subject.');
     if (!v('f-topic')) return err('Please enter the topic.');
     jset('tt_prefs', Object.assign(jget('tt_prefs', {}), { subject: v('f-subject'), className: v('f-class'), term: v('f-term') || undefined }));
     var b = { subject: v('f-subject'), className: v('f-class'), topic: v('f-topic'), extras: v('f-extras') };
+    if (TB_KINDS.indexOf(kind) > -1) b.textbookIds = selTb.slice();
     if (kind === 'lesson-note') { b.term = v('f-term'); b.week = v('f-week'); b.duration = v('f-duration'); }
     if (kind === 'questions') { b.type = v('f-type'); b.difficulty = v('f-diff'); if (b.type !== 'theory') b.objectiveCount = v('f-obj'); if (b.type !== 'objective') b.theoryCount = v('f-th'); }
     if (kind === 'worksheet') { b.activityCount = v('f-act'); }
@@ -619,6 +723,7 @@
       '<div class="kv"><span>Used today</span><b>' + us.used + ' of ' + us.limit + '</b></div>' +
       (us.monthlyLimit ? '<div class="kv"><span>Used this month</span><b>' + (us.monthlyUsed || 0) + ' of ' + us.monthlyLimit + '</b></div>' : '') + '</div>' +
       plansCard() +
+      '<div class="card"><b>My textbooks</b><p class="sub">Add the books your school uses, with their contents. The AI will cite them exactly in lesson notes, schemes, questions and worksheets.</p><button class="btn alt" data-go="textbooks">Open my textbooks</button></div>' +
       (S.installEvt ? '<div class="card"><b>Install the app</b><p class="sub">Add it to your home screen.</p><button class="btn alt" data-act="install">Install</button></div>' : '') +
       '<div class="card"><b>Change password</b>' +
       '<label for="c-old">Current password</label><input id="c-old" type="password" autocomplete="current-password">' +
@@ -725,6 +830,21 @@
     deleteitem: confirmDelete,
     dodelete: doDelete,
     closemodal: closeModal,
+    addtextbook: function () { modal(tbFormHtml(null), true); },
+    savetextbook: saveTextbook,
+    tbmore: function () { tbShowAll = true; drawTbList(); },
+    tbdetail: function (el) { showTbDetail(el.getAttribute('data-id')); },
+    tbedit: async function (el) {
+      try { var t = await api('GET', '/api/textbooks/' + el.getAttribute('data-id')); modal(tbFormHtml(t), true); } catch (e) { toast(e.message, true); }
+    },
+    tbdelete: function (el) {
+      modal('<h3>Delete ' + esc(el.getAttribute('data-name')) + '?</h3><p class="sub">It will be removed from your textbooks. Notes you already made keep their references.</p>' +
+        '<button class="btn danger" data-act="dotbdelete" data-id="' + el.getAttribute('data-id') + '">Yes, delete</button><button class="btn alt" data-act="closemodal">Keep it</button>');
+    },
+    dotbdelete: async function (el) {
+      try { await api('DELETE', '/api/textbooks/' + el.getAttribute('data-id')); closeModal(); toast('Deleted'); selTb = selTb.filter(function (x) { return String(x) !== el.getAttribute('data-id'); }); if ($('#tb-screen')) loadTbScreen(); }
+      catch (e) { closeModal(); toast(e.message, true); }
+    },
     seeplans: function () { closeModal(); go('#/account'); },
     lockeditem: function () {
       modal('<h3>Locked on the free plan</h3><p class="sub">The free plan opens your newest ' + ((S.meta && S.meta.classLimits && S.meta.classLimits.free.library) || 30) + ' items. This older item is safe and nothing is deleted. Upgrade to Teacher Plus to open everything again.</p>' +

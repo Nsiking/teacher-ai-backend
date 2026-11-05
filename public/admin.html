@@ -42,6 +42,34 @@
     <div id="bkList" style="font-size:.85rem;margin-top:8px;color:var(--mute)"></div>
   </div>
   <div class="card">
+    <h2>Textbook catalogue (verified books every teacher can pick)</h2>
+    <p style="color:var(--mute);font-size:.9rem;margin:0">Only add books you have checked. The AI cites exactly what is typed here. Contents lines look like: Chapter 1 | Whole numbers | pp. 1-20</p>
+    <div id="catList" style="font-size:.85rem;margin:10px 0">Not loaded yet.</div>
+    <div class="row">
+      <div><label>Title</label><input id="cTitle"></div>
+      <div><label>Author(s)</label><input id="cAuthors"></div>
+      <div><label>Publisher</label><input id="cPublisher"></div>
+    </div>
+    <div class="row">
+      <div><label>Edition</label><input id="cEdition" placeholder="e.g. 3rd Edition"></div>
+      <div><label>Year</label><input id="cYear" placeholder="e.g. 2019"></div>
+      <div><label>ISBN (optional)</label><input id="cIsbn"></div>
+    </div>
+    <div class="row">
+      <div><label>Subject</label><input id="cSubject" placeholder="e.g. Mathematics"></div>
+      <div><label>Classes (JSS 1, JSS 2 ... or All)</label><input id="cLevels" placeholder="JSS 1, JSS 2"></div>
+      <div></div>
+    </div>
+    <label>Contents list (one chapter per line)</label>
+    <textarea id="cContents" rows="6" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit"></textarea>
+    <button id="btnCatSave">Save book</button><button id="btnCatClear" style="background:transparent;color:var(--brand);border:1px solid var(--brand)">Clear form</button>
+    <h2 style="margin-top:18px">Add many books at once</h2>
+    <p style="color:var(--mute);font-size:.9rem;margin:0">One book per line: Title | Authors | Publisher | Edition | Year | ISBN | Subject | Classes. Add the contents afterwards with Edit.</p>
+    <textarea id="cBulk" rows="5" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit"></textarea>
+    <button id="btnCatBulk">Add these books</button>
+    <div id="catOut" style="font-size:.88rem;margin-top:8px"></div>
+  </div>
+  <div class="card">
     <h2>Give a user a paid plan (or set back to free)</h2>
     <div class="row">
       <div><label>Their email or phone</label><input id="pIdent"></div>
@@ -120,12 +148,50 @@ async function loadBackup(withList) {
 }
 $('btnBkList').onclick = async () => { try { await loadBackup(true); } catch (e) { msg(e.message, true); } };
 $('btnBkRun').onclick = async () => { msg('Backing up... this can take a few seconds.'); try { const r = await api('POST', '/api/admin/backup/run'); msg('Backup saved: ' + r.key); await loadBackup(true); } catch (e) { msg(e.message, true); try { await loadBackup(false); } catch (x) {} } };
-$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); await loadBackup(false); msg(''); } catch (e) { msg(e.message, true); } };
+$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); await loadBackup(false); await loadCatalogue(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnUsers').onclick = async () => { try { await loadUsers(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnPlan').onclick = async () => { try { const r = await api('POST', '/api/admin/set-plan', { identifier: $('pIdent').value, plan: $('pPlan').value, days: Number($('pDays').value) }); msg('Saved: ' + r.user.name + ' is now on the ' + r.user.plan + ' plan' + (r.user.planExpiresAt ? ' until ' + new Date(r.user.planExpiresAt).toLocaleDateString() : '') + '.'); await loadUsers(); } catch (e) { msg(e.message, true); } };
 $('btnDel').onclick = async () => { try { if ($('xOk').value.trim() !== 'DELETE') throw new Error('Type DELETE in the box to confirm.'); await api('POST', '/api/admin/delete-user', { identifier: $('xIdent').value }); msg('Account deleted.'); $('xIdent').value = ''; $('xOk').value = ''; await loadUsers(); } catch (e) { msg(e.message, true); } };
 const PLAN_DAYS = { monthly: 30, term: 91, year: 365, free: '' };
 $('pPlan').onchange = () => { $('pDays').value = PLAN_DAYS[$('pPlan').value]; };
+let catEditing = null;
+async function loadCatalogue() {
+  const r = await api('GET', '/api/admin/textbooks');
+  window.__cat = r.textbooks;
+  $('catList').innerHTML = r.textbooks.length
+    ? r.textbooks.map((t, i) => '<div style="padding:6px 0;border-top:1px solid var(--line)"><b>' + esc(t.title) + '</b> &middot; ' + esc(t.authors) + ' &middot; ' + esc([t.edition, t.year].filter(Boolean).join(' ')) + ' &middot; ' + esc(t.subject) + ' &middot; ' + esc(t.levels.join(', ')) + (t.hasContents ? ' &middot; contents &#10003;' : '') +
+      ' <a href="#" data-edit="' + i + '">Edit</a> &middot; <a href="#" data-del="' + t.id + '" style="color:var(--err)">Delete</a></div>').join('')
+    : 'No catalogue books yet.';
+}
+function catForm(t) {
+  catEditing = t ? t.id : null;
+  $('cTitle').value = t ? t.title : ''; $('cAuthors').value = t ? t.authors : ''; $('cPublisher').value = t ? t.publisher : '';
+  $('cEdition').value = t ? t.edition : ''; $('cYear').value = t ? t.year : ''; $('cIsbn').value = t ? t.isbn : '';
+  $('cSubject').value = t ? t.subject : ''; $('cLevels').value = t ? t.levels.join(', ') : ''; $('cContents').value = t ? t.contents : '';
+  $('btnCatSave').textContent = t ? 'Update book' : 'Save book';
+}
+$('catList').onclick = async (e) => {
+  const a = e.target.closest('a'); if (!a) return; e.preventDefault();
+  try {
+    if (a.dataset.edit !== undefined) { catForm(window.__cat[Number(a.dataset.edit)]); window.scrollTo(0, $('cTitle').getBoundingClientRect().top + window.scrollY - 80); }
+    if (a.dataset.del) { if (!confirm('Delete this catalogue book?')) return; await api('DELETE', '/api/admin/textbooks/' + a.dataset.del); await loadCatalogue(); msg('Deleted.'); }
+  } catch (x) { msg(x.message, true); }
+};
+$('btnCatClear').onclick = () => catForm(null);
+$('btnCatSave').onclick = async () => {
+  try {
+    const body = { title: $('cTitle').value, authors: $('cAuthors').value, publisher: $('cPublisher').value, edition: $('cEdition').value, year: $('cYear').value, isbn: $('cIsbn').value, subject: $('cSubject').value, levels: $('cLevels').value, contents: $('cContents').value };
+    if (catEditing) await api('PUT', '/api/admin/textbooks/' + catEditing, body); else await api('POST', '/api/admin/textbooks', body);
+    msg('Book saved.'); catForm(null); await loadCatalogue();
+  } catch (e) { msg(e.message, true); }
+};
+$('btnCatBulk').onclick = async () => {
+  try {
+    const r = await api('POST', '/api/admin/textbooks/import', { rows: $('cBulk').value });
+    $('catOut').innerHTML = '<b>' + r.added + ' added, ' + r.failed + ' not added.</b>' + (r.failed ? '<br><span style="color:var(--err)">' + r.results.filter((x) => !x.ok).map((x) => esc(x.line.slice(0, 60)) + ': ' + esc(x.error)).join('<br>') + '</span>' : '');
+    msg(''); await loadCatalogue();
+  } catch (e) { msg(e.message, true); }
+};
 $('btnBulk').onclick = async () => {
   try {
     const body = { identifiers: $('bIdents').value, plan: $('bPlan').value };

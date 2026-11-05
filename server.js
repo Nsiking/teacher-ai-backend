@@ -11,6 +11,7 @@ const plans = require('./src/plans');
 const ai = require('./src/ai');
 const prompts = require('./src/prompts');
 const backup = require('./src/backup');
+const textbooks = require('./src/textbooks');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const MAX_BODY = 300 * 1024;
@@ -126,6 +127,7 @@ function deleteUserData(id) {
   for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes']) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id);
   }
+  db.prepare('DELETE FROM textbooks WHERE owner_user_id = ?').run(id);
   db.prepare('DELETE FROM users WHERE id = ?').run(id);
 }
 
@@ -137,6 +139,7 @@ add('GET', '/api/meta', () => ({
   terms: prompts.TERMS,
   kinds: Object.keys(prompts.builders),
   limits: { free: plans.FREE_DAILY, paid: plans.PAID_DAILY, freeMonthly: plans.FREE_MONTHLY },
+  textbookLimits: { free: plans.maxTextbooks('free'), paid: plans.maxTextbooks('monthly') },
   plans: ['free', ...plans.PAID_PLANS],
   plansInfo: plans.PLAN_INFO,
   classLimits: plans.LIMITS,
@@ -194,7 +197,8 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
   const user = ctx.user;
   const plan = plans.effective(user);
 
-  const spec = def.build(ctx.body, { plan, maxPupils: plans.maxPupils(plan), maxAnswers: plans.maxAnswers(plan) });
+  const chosenBooks = textbooks.resolveForUser(user, ctx.body.textbookIds);
+  const spec = def.build(ctx.body, { plan, maxPupils: plans.maxPupils(plan), maxAnswers: plans.maxAnswers(plan), textbooks: chosenBooks });
   rateLimit(`gen:${user.id}`, parseInt(process.env.GEN_PER_MINUTE, 10) || 6, 60 * 1000);
   const limit = plans.dailyLimit(plan);
   const mLimit = plans.monthlyLimit(plan);
@@ -216,6 +220,7 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
       mockText: spec.mock,
     });
     content = out.text;
+    if (spec.textbooks && spec.textbooks.length) content = textbooks.applyRefs(content, spec.textbooks);
     if (spec.post) {
       const p = spec.post(content);
       content = p.content;
@@ -298,6 +303,7 @@ add('DELETE', '/api/library/:id', { auth: true }, (ctx) => {
 
 // ------------------------------------------------------------------ classroom record
 require('./src/classroom').register(add);
+textbooks.register(add);
 
 // ------------------------------------------------------------------ admin (needs ADMIN_KEY)
 add('GET', '/api/admin/stats', { admin: true }, () => {

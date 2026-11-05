@@ -113,6 +113,22 @@ CREATE TABLE IF NOT EXISTS assessments (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_assess_class ON assessments (class_id);
+CREATE TABLE IF NOT EXISTS textbooks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_user_id INTEGER,
+  title TEXT NOT NULL,
+  authors TEXT NOT NULL,
+  publisher TEXT NOT NULL DEFAULT '',
+  edition TEXT NOT NULL DEFAULT '',
+  year TEXT NOT NULL DEFAULT '',
+  isbn TEXT NOT NULL DEFAULT '',
+  subject TEXT NOT NULL,
+  levels TEXT NOT NULL,
+  contents TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tb_owner ON textbooks (owner_user_id);
 CREATE TABLE IF NOT EXISTS scores (
   assessment_id INTEGER NOT NULL,
   pupil_id INTEGER NOT NULL,

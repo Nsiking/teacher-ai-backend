@@ -1,5 +1,6 @@
 'use strict';
 const { HttpError, text, int } = require('./util');
+const books = require('./textbooks');
 
 const CLASSES = [
   'Nursery 1', 'Nursery 2', 'Nursery 3',
@@ -39,7 +40,9 @@ Rules:
 - Output only the requested material, in clean Markdown. No introduction, no closing remarks, and no mention of being an AI.`;
 
 // ------------------------------------------------------------------ Lesson note
-function lessonNote(b) {
+function lessonNote(b, opts) {
+  const tbs = (opts && opts.textbooks) || [];
+  const bookBlock = tbs.length ? '\n\n' + books.promptBlock(tbs) : '';
   const subject = text(b.subject, { name: 'Subject', required: true, max: 60 });
   const cls = text(b.className, { name: 'Class', required: true, max: 30 });
   const topic = text(b.topic, { name: 'Topic', required: true, max: 150 });
@@ -64,7 +67,7 @@ Week: ${week || 'not given'}
 Duration: ${duration} minutes
 Number of ${L}: ${count || 'not given'}
 Extra requests: ${extras || 'none'}
-</teacher_input>
+</teacher_input>${bookBlock}
 
 Use exactly this structure and these headings:
 
@@ -81,7 +84,7 @@ Start with: "By the end of the lesson, the ${L} should be able to:" then 3 to 5 
 Practical materials available in an ordinary Nigerian classroom.
 
 ## Reference Materials
-The NERDC curriculum for the subject and the approved textbook for the class. Do not invent titles.
+${tbs.length ? 'List each textbook above on its own line using its [BOOK1], [BOOK2] or [BOOK3] tag, then the NERDC curriculum. Where the contents list of a book shows this topic, add the chapter and pages exactly as given in that list (for example: Chapter 5, pp. 34 to 52). If the topic does not appear in a book\'s contents list, write: topic not found in the contents provided, please check the book. Let the explanations and examples follow how the textbook organises the topic, without copying its sentences.' : 'The NERDC curriculum for the subject and the approved textbook for the class. Do not invent titles.'}
 
 ## Introduction (Set Induction)
 A short, engaging starter linked to the ${L}' daily life.
@@ -105,13 +108,16 @@ Two or three tasks for home.`;
     prompt,
     maxTokens: 4500,
     title: `${subject}: ${topic} (${cls})`,
-    meta: { subject, className: cls, topic, subTopic, term, week, duration },
-    mock: `# LESSON NOTE\n\n[TEST MODE] Sample lesson note for ${subject}, ${cls}: ${topic}.\n\n## Behavioural Objectives\n1. State the meaning of the topic.\n2. Give two examples.`,
+    meta: { subject, className: cls, topic, subTopic, term, week, duration, textbooks: tbs.map((t) => t.id) },
+    textbooks: tbs,
+    mock: `# LESSON NOTE\n\n[TEST MODE] Sample lesson note for ${subject}, ${cls}: ${topic}.\n\n## Behavioural Objectives\n1. State the meaning of the topic.\n2. Give two examples.` + (tbs.length ? '\n\n## Reference Materials\n- [BOOK1]' : ''),
   };
 }
 
 // ------------------------------------------------------------------ Questions
-function questions(b) {
+function questions(b, opts) {
+  const tbs = (opts && opts.textbooks) || [];
+  const bookBlock = tbs.length ? '\n\n' + books.promptBlock(tbs) : '';
   const subject = text(b.subject, { name: 'Subject', required: true, max: 60 });
   const cls = text(b.className, { name: 'Class', required: true, max: 30 });
   const topic = text(b.topic, { name: 'Topic', required: true, max: 150 });
@@ -136,14 +142,14 @@ Objective questions: ${objectiveCount}
 Theory questions: ${theoryCount}
 Difficulty: ${difficulty}
 Extra requests: ${extras || 'none'}
-</teacher_input>
+</teacher_input>${bookBlock}
 
-${examHint(cls)}
+${examHint(cls)}${tbs.length ? '\nCover this topic the way the textbook chapter in the contents list does, and set the questions at the level of the textbook.' : ''}
 
 Use exactly this structure:
 
 # ${subject.toUpperCase()}: ${cls}
-A small table with: Topic, Time Allowed (........), Name (........), Date (........). Then one line of instructions for the ${learners(cls)}.
+A small table with: Topic, ${tbs.length ? 'Reference (cite the textbook with its [BOOK1] tag), ' : ''}Time Allowed (........), Name (........), Date (........). Then one line of instructions for the ${learners(cls)}.
 ${objectiveCount > 0 ? `
 ## Section A: Objective Questions
 Exactly ${objectiveCount} multiple-choice questions, numbered, each with four options A to D and only one correct answer. Spread the correct answers across A, B, C and D.` : ''}
@@ -160,13 +166,16 @@ ${objectiveCount > 0 ? '## Answer Key\nA compact list: 1. B, 2. D, and so on.\n'
     prompt,
     maxTokens: Math.min(8000, 1500 + objectiveCount * 130 + theoryCount * 450),
     title: `${subject} questions: ${topic} (${cls})`,
-    meta: { subject, className: cls, topic, type, difficulty, objectiveCount, theoryCount },
+    meta: { subject, className: cls, topic, type, difficulty, objectiveCount, theoryCount, textbooks: tbs.map((t) => t.id) },
+    textbooks: tbs,
     mock: `# ${subject.toUpperCase()}: ${cls}\n\n[TEST MODE] ${objectiveCount} objective and ${theoryCount} theory questions on ${topic}.\n\n---\n\n# TEACHER'S COPY ONLY\n1. B`,
   };
 }
 
 // ------------------------------------------------------------------ Worksheet
-function worksheet(b) {
+function worksheet(b, opts) {
+  const tbs = (opts && opts.textbooks) || [];
+  const bookBlock = tbs.length ? '\n\n' + books.promptBlock(tbs) : '';
   const subject = text(b.subject, { name: 'Subject', required: true, max: 60 });
   const cls = text(b.className, { name: 'Class', required: true, max: 30 });
   const topic = text(b.topic, { name: 'Topic', required: true, max: 150 });
@@ -181,12 +190,12 @@ Class: ${cls}
 Topic: ${topic}
 Number of activities: ${activities}
 Extra requests: ${extras || 'none'}
-</teacher_input>
+</teacher_input>${bookBlock}
 
 Use exactly this structure:
 
 # WORKSHEET: ${topic}
-A line for Name ........, Class ........, Date ........, then the subject and a one-line instruction for the ${learners(cls)}.
+A line for Name ........, Class ........, Date ........, then the subject and a one-line instruction for the ${learners(cls)}.${tbs.length ? ' Then one line: Reference: [BOOK1]. Base the activities on how the textbook presents the topic.' : ''}
 
 Then ${activities} numbered activities grouped under short headings. Use a variety suited to the class level (for example fill in the gaps, true or false, matching, short answer, word problems, drawing or labelling described in words, a small puzzle). Leave answer space with dotted lines (........) where ${learners(cls)} should write. Keep the instructions short and clear.
 
@@ -199,13 +208,16 @@ Correct answers for every activity.`;
     prompt,
     maxTokens: 4000,
     title: `${subject} worksheet: ${topic} (${cls})`,
-    meta: { subject, className: cls, topic, activities },
+    meta: { subject, className: cls, topic, activities, textbooks: tbs.map((t) => t.id) },
+    textbooks: tbs,
     mock: `# WORKSHEET: ${topic}\n\n[TEST MODE] ${activities} activities for ${cls} ${subject}.\n\n---\n\n# TEACHER'S ANSWER KEY\n1. Sample answer`,
   };
 }
 
 // ------------------------------------------------------------------ Scheme of work
-function schemeOfWork(b) {
+function schemeOfWork(b, opts) {
+  const tbs = (opts && opts.textbooks) || [];
+  const bookBlock = tbs.length ? '\n\n' + books.promptBlock(tbs) : '';
   const subject = text(b.subject, { name: 'Subject', required: true, max: 60 });
   const cls = text(b.className, { name: 'Class', required: true, max: 30 });
   const term = text(b.term, { name: 'Term', required: true, max: 20 });
@@ -225,12 +237,12 @@ Number of teaching weeks: ${weeks}
 Periods per week: ${periods || 'not given'}
 Topics the teacher wants covered (if any): ${topics || 'none given'}
 Extra requests: ${extras || 'none'}
-</teacher_input>
+</teacher_input>${bookBlock}
 
 Rules:
 - Follow the NERDC curriculum sequence for this subject, class and term as closely as you can. If the teacher listed topics, use them in their order and add only what is needed to fill the weeks.
 - Spread the topics sensibly across the ${weeks} weeks. A big topic may take two weeks. Week 1 may revise the previous term's work. Put a mid-term test or break near the middle of the term, and use the last two weeks for revision and examinations.
-- Learning objectives must be measurable and begin with action verbs, written for the ${L}.
+${tbs.length ? "- Use the textbook(s) above. When a book has a contents list, follow its chapter order and spread the chapters across the weeks as sensibly as the term allows. In every row's Reference cell write the short tag with the chapter and pages exactly as given in the contents, for example: [B1] Ch. 4, pp. 40 to 55. A week with no suitable chapter gets a dash. If a book has no contents list, write only the short tag.\n" : ''}- Learning objectives must be measurable and begin with action verbs, written for the ${L}.
 - Inside a table cell, keep the text short (a phrase or two), number items like "1) ... 2) ...", never use a line break, and never use the | character.
 
 Use exactly this structure:
@@ -239,20 +251,21 @@ Use exactly this structure:
 A two-column table (Item | Details) with rows: School (........), Subject, Class, Term, Session (........), Number of weeks, Periods per week (use the number given, otherwise ........).
 
 ## Scheme
-One table with exactly these columns: Week | Topic and Sub-topics | Learning Objectives | Teaching and Learning Activities | Instructional Materials | Evaluation
+One table with exactly these columns: Week | Topic and Sub-topics | Learning Objectives | Teaching and Learning Activities | Instructional Materials | Evaluation${tbs.length ? ' | Reference' : ''}
 Exactly ${weeks} rows, numbered 1 to ${weeks}, one row per week.
 
 Finish with one italic line: *Check this scheme against your school's approved curriculum before use.*`;
 
   const rows = Array.from({ length: weeks }, (_, i) =>
-    `| ${i + 1} | [TEST MODE] Sample topic ${i + 1} | 1) State it 2) Give examples | Teacher explains, ${L} practise in groups | Charts, textbook | Class exercise |`).join('\n');
+    `| ${i + 1} | [TEST MODE] Sample topic ${i + 1} | 1) State it 2) Give examples | Teacher explains, ${L} practise in groups | Charts, textbook | Class exercise |${tbs.length ? ' [B1] Ch. ' + (i + 1) + ' |' : ''}`).join('\n');
 
   return {
     prompt,
     maxTokens: Math.min(8000, 1800 + weeks * 380),
     title: `${subject} scheme of work: ${term} (${cls})`,
-    meta: { subject, className: cls, term, weeks, periodsPerWeek: periods },
-    mock: `# SCHEME OF WORK\n\n| Item | Details |\n|---|---|\n| School | ........ |\n| Subject | ${subject} |\n| Class | ${cls} |\n| Term | ${term} |\n| Number of weeks | ${weeks} |\n\n## Scheme\n\n| Week | Topic and Sub-topics | Learning Objectives | Teaching and Learning Activities | Instructional Materials | Evaluation |\n|---|---|---|---|---|---|\n${rows}\n\n*Check this scheme against your school's approved curriculum before use.*`,
+    meta: { subject, className: cls, term, weeks, periodsPerWeek: periods, textbooks: tbs.map((t) => t.id) },
+    textbooks: tbs,
+    mock: `# SCHEME OF WORK\n\n| Item | Details |\n|---|---|\n| School | ........ |\n| Subject | ${subject} |\n| Class | ${cls} |\n| Term | ${term} |\n| Number of weeks | ${weeks} |\n\n## Scheme\n\n| Week | Topic and Sub-topics | Learning Objectives | Teaching and Learning Activities | Instructional Materials | Evaluation |${tbs.length ? ' Reference |' : ''}\n|---|---|---|---|---|---|${tbs.length ? '---|' : ''}\n${rows}\n\n*Check this scheme against your school's approved curriculum before use.*`,
   };
 }
 

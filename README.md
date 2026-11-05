@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 8)
+# SmartClass Teacher AI - Backend + teacher app screens (version 9)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -64,6 +64,16 @@ library, no footer. Every number can be changed with a setting in Render (see .e
 A teacher who goes back to Free keeps all classes and pupils. Only adding more is blocked.
 Activate a plan on /admin (Give a user a paid plan). School licences: /admin > "School licence" gives many teachers
 a plan at once. A 7-day trial = give the plan for 7 days.
+
+## Textbook references
+Teachers add the books their school uses (title, author, publisher, edition, year, ISBN, subject, classes, and the
+contents list they type in). In Lesson Note, Scheme of Work, Questions and Worksheet they tick up to 3 books.
+The AI may only use those books. The system writes the exact citation itself, so a title, author or edition can
+never be invented. Chapters and pages come only from the contents list that was typed in.
+Free teachers keep 5 books of their own, Teacher Plus keeps 30 (FREE_MAX_TEXTBOOKS, PAID_MAX_TEXTBOOKS).
+/admin > "Textbook catalogue" holds verified books that every teacher can pick. Add only books you have checked.
+Bulk line format: Title | Authors | Publisher | Edition | Year | ISBN | Subject | Classes
+Test it:  node tests/textbook-test.js
 
 ## Legal pages (needed for the Google Play listing)
 /privacy   /terms   /delete-account

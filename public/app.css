@@ -159,3 +159,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); out
 .perks li { margin: 3px 0; }
 .item.locked { opacity: .7; }
 a.btn { text-decoration: none; }
+
+/* textbooks */
+.tb-box { margin-top: 12px; }
+.tb { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); color: var(--ink); font-size: .92rem; font-weight: 400; margin: 0; }
+.tb input { width: 22px; min-height: 22px; margin-top: 2px; flex: 0 0 22px; }
+.chk-row { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 8px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--ink); font-weight: 400; font-size: .9rem; }
+.chk input { width: 20px; min-height: 20px; }
+.modal.wide { text-align: left; max-height: 90vh; overflow-y: auto; }
+.modal.wide h3 { text-align: center; }
+.tb-contents { white-space: pre-wrap; font: .85rem/1.5 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 240px; overflow: auto; margin: 4px 0 10px; }
