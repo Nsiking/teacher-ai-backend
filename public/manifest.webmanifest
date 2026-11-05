@@ -1,0 +1,14 @@
+{
+  "name": "SmartClass Teacher AI",
+  "short_name": "Teacher AI",
+  "description": "AI lesson notes, questions, worksheets and report comments for Nigerian teachers.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf6ef",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

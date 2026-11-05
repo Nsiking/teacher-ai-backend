@@ -1,0 +1,13 @@
+{
+  "name": "teacher-ai-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SmartClass Teacher AI - backend (accounts, AI generation, library, daily limits)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env server.js",
+    "test": "node --disable-warning=ExperimentalWarning tests/smoke.js"
+  },
+  "engines": { "node": ">=22.13.0" }
+}

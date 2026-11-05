@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delete my account | SmartClass Teacher AI</title>
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#0f766e">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+<style>
+  .legal { max-width: 760px; margin: 0 auto; padding: 18px 16px 60px; }
+  .legal h1 { font-size: 1.5rem; margin: 6px 0 2px; }
+  .legal h2 { font-size: 1.1rem; margin: 26px 0 6px; color: var(--brand); }
+  .legal p, .legal li { line-height: 1.6; }
+  .legal ul { padding-left: 22px; }
+  .legal .meta { color: var(--mute); font-size: .9rem; margin: 0 0 14px; }
+  .legal a { color: var(--brand); }
+  .foot { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--mute); font-size: .88rem; }
+  .foot a { margin-right: 14px; }
+  .tbl { overflow-x: auto; }
+  .legal table { border-collapse: collapse; width: 100%; font-size: .92rem; min-width: 480px; }
+  .legal th, .legal td { border: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
+  .legal th { background: var(--brand-soft); }
+</style>
+</head>
+<body>
+<header class="top"><a href="/" style="color:inherit;text-decoration:none" class="top-title">SmartClass Teacher AI</a></header>
+<main class="legal">
+<h1>Delete my account</h1>
+<p class="meta">SmartClass Teacher AI &middot; Last updated: 4 November 2026</p>
+
+<p>You can delete your SmartClass Teacher AI account and all the data linked to it. This page explains how.</p>
+
+<h2>What gets deleted</h2>
+<ul>
+<li>Your account details (name, email, phone number and password).</li>
+<li>Your whole library: lesson notes, schemes of work, questions, worksheets, marking results and report comments.</li>
+<li>Your classroom record: classes, pupils, attendance, assessments and scores.</li>
+<li>Your usage records.</li>
+</ul>
+<p>The deletion takes effect straight away and <b>cannot be undone</b>. Backup copies, if any, are removed within 30 days. If you have a paid plan through Google Play, deleting your account does not cancel the subscription. Please cancel it in Google Play as well.</p>
+
+<h2>Option 1: Delete inside the app</h2>
+<p>Open the app, tap <b>Account</b>, scroll down to <b>Delete my account</b>, enter your password and confirm.</p>
+
+<h2>Option 2: Delete here</h2>
+<div class="card" id="box">
+<label for="d-id" style="margin-top:0">Your email address or phone number</label>
+<input id="d-id" autocomplete="username" placeholder="you@email.com or 08012345678" maxlength="120">
+<label for="d-pw">Your password</label>
+<input id="d-pw" type="password" autocomplete="current-password" maxlength="100">
+<label style="display:flex;gap:10px;align-items:flex-start;color:var(--ink);font-weight:400;margin-top:14px"><input id="d-ok" type="checkbox" style="width:22px;min-height:22px;margin-top:2px"> <span>I understand that my account and all my data will be deleted permanently.</span></label>
+<div class="err" id="d-err"></div>
+<button class="btn danger block" id="d-go">Delete my account permanently</button>
+</div>
+<div class="card hide" id="done"><b>Your account has been deleted.</b><p class="sub" style="margin:6px 0 0">Your data has been removed. Thank you for using SmartClass Teacher AI. Remember to cancel any Google Play subscription if you have one.</p></div>
+
+<h2>Option 3: Ask us by email</h2>
+<p>If you forgot your password or can no longer open the app, email <a href="mailto:support@smartclassaiacademy.com">support@smartclassaiacademy.com</a> from the email address on your account, or tell us the phone number on your account. Write "Delete my account" in the subject. We will confirm that the account is yours, delete it, and aim to do this within 7 days.</p>
+
+<div class="foot">
+<a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Use</a><a href="/delete-account">Delete my account</a><a href="mailto:support@smartclassaiacademy.com">support@smartclassaiacademy.com</a>
+<p>SmartClass AI Academy Limited, No. 21 Lanre Mohammed Street, Obawole, Ogba, Lagos, Nigeria.</p>
+</div>
+</main>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  $('d-go').onclick = async function () {
+    var err = $('d-err'); err.textContent = '';
+    var id = $('d-id').value.trim(), pw = $('d-pw').value;
+    if (!id || !pw) { err.textContent = 'Please enter your email or phone number and your password.'; return; }
+    if (!$('d-ok').checked) { err.textContent = 'Please tick the box to confirm.'; return; }
+    var btn = $('d-go'); btn.disabled = true; btn.textContent = 'Please wait…';
+    try {
+      var r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: id, password: pw }) });
+      var j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Something went wrong. Please try again.');
+      var d = await fetch('/api/me', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + j.token }, body: JSON.stringify({ password: pw }) });
+      var dj = await d.json();
+      if (!d.ok) throw new Error(dj.error || 'Something went wrong. Please try again.');
+      $('box').classList.add('hide'); $('done').classList.remove('hide');
+      try { localStorage.clear(); } catch (e) { /* ignore */ }
+    } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Delete my account permanently'; }
+  };
+})();
+</script>
+</body>
+</html>
