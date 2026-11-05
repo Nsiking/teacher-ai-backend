@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 10)
+# SmartClass Teacher AI - Backend + teacher app screens (version 11)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -64,6 +64,14 @@ library, no footer. Every number can be changed with a setting in Render (see .e
 A teacher who goes back to Free keeps all classes and pupils. Only adding more is blocked.
 Activate a plan on /admin (Give a user a paid plan). School licences: /admin > "School licence" gives many teachers
 a plan at once. A 7-day trial = give the plan for 7 days.
+
+## Contents from a photo
+When adding or editing a textbook, "Read it from a photo" lets a teacher photograph the contents page (up to 3 photos).
+The photo is shrunk on the phone, sent to the AI to read, and the lines come back into the contents box for the teacher
+to check and edit. It counts as ONE generation (daily and monthly allowance) on every plan. It is given back if nothing
+could be read. Photos are not stored. In test mode (AI_MOCK=1) it returns sample lines, so the screens can be tried free.
+The AI is told to copy only what is printed, never to invent a chapter or page, and to mark unclear words with (?).
+Test it:  node tests/photo-test.js
 
 ## Lesson Plan and Time-Table
 Lesson Plan (Home): a short, timed plan: objectives, stages with teacher and learner activities, support and extension,

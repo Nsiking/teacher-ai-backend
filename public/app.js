@@ -442,11 +442,68 @@
       '<div class="row2"><div>' + f('tb-year', 'Year', t.year, 'e.g. 2019', 4) + '</div><div>' + f('tb-isbn', 'ISBN (optional)', t.isbn, '', 20) + '</div></div>' +
       f('tb-subject', 'Subject', t.subject || (($('#f-subject') || {}).value || ''), 'e.g. Mathematics', 60) +
       '<label>Class(es)</label><div class="chk-row">' + boxes + '<label class="chk"><input type="checkbox" id="tb-all"' + (all ? ' checked' : '') + '> All classes</label></div>' +
-      '<label for="tb-contents">Contents list (optional)</label><textarea id="tb-contents" style="min-height:140px" placeholder="Chapter 1 | Whole numbers | pp. 1-20&#10;Chapter 2 | Fractions | pp. 21-45">' + esc(t.contents || '') + '</textarea>' +
+      '<label for="tb-contents">Contents list (optional)</label>' +
+      '<button type="button" class="btn alt small" data-act="tbphoto">📷 Read it from a photo</button><input type="file" id="tb-photo" accept="image/*" multiple class="hide">' +
+      '<p class="hint" style="margin:6px 0">Choose a clear photo of the contents page (up to 3 photos). This uses 1 generation.</p><div id="tb-photo-status" class="hint" aria-live="polite"></div>' +
+      '<textarea id="tb-contents" style="min-height:140px" placeholder="Chapter 1 | Whole numbers | pp. 1-20&#10;Chapter 2 | Fractions | pp. 21-45">' + esc(t.contents || '') + '</textarea>' +
       '<p class="hint">Copy the chapter titles and page numbers from the contents page of your own copy. The AI uses only what you type here, so check it against the book.</p>' +
       '<div class="err" id="tb-err"></div></div>' +
       '<button class="btn" data-act="savetextbook"' + (t.id ? ' data-id="' + t.id + '"' : '') + '>Save textbook</button><button class="btn alt" data-act="closemodal">Cancel</button>';
   }
+  // ---- reading the contents page from a photo
+  function loadBitmap(file) {
+    if (window.createImageBitmap) return createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return loadImg(file); });
+    return loadImg(file);
+  }
+  function loadImg(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function () { URL.revokeObjectURL(url); resolve(im); };
+      im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('That file is not a picture.')); };
+      im.src = url;
+    });
+  }
+  // Shrinks a photo on the phone so it uploads quickly on mobile data.
+  async function shrinkPhoto(file, maxSide, quality) {
+    var bmp = await loadBitmap(file);
+    var w = bmp.width, h = bmp.height, scale = Math.min(1, maxSide / Math.max(w, h));
+    var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
+    var g = c.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    return { mediaType: 'image/jpeg', data: c.toDataURL('image/jpeg', quality).split(',')[1] };
+  }
+  async function readPhotos(files) {
+    var st = $('#tb-photo-status'); if (!st) return;
+    function say(html, err) { st.className = 'hint' + (err ? ' err' : ''); st.innerHTML = html; }
+    if (!files.length) return;
+    if (files.length > 3) return say('Please choose up to 3 photos.', true);
+    for (var i = 0; i < files.length; i++) if (!/^image\//.test(files[i].type)) return say('Please choose pictures only.', true);
+    if (!navigator.onLine) return say('You are offline. Please connect to the internet.', true);
+    say('Reading the photo… this can take up to a minute.');
+    var btn = $('[data-act=tbphoto]'); if (btn) btn.disabled = true;
+    try {
+      var sizes = [[1500, 0.78], [1300, 0.65], [1100, 0.55]], images = [];
+      for (var k = 0; k < sizes.length; k++) {
+        images = [];
+        for (var j = 0; j < files.length; j++) images.push(await shrinkPhoto(files[j], sizes[k][0], sizes[k][1]));
+        var total = images.reduce(function (t, im) { return t + im.data.length; }, 0);
+        if (total < 3000000 && images.every(function (im) { return im.data.length < 1900000; })) break;
+      }
+      var r = await api('POST', '/api/textbooks/read-contents', { images: images, title: ($('#tb-title') || {}).value || '' });
+      if (r.usage) { S.usage = r.usage; jset('tt_usage', r.usage); }
+      var box = $('#tb-contents');
+      if (box) box.value = box.value.trim() ? box.value.replace(/\s+$/, '') + '\n' + r.contents : r.contents;
+      var unsure = (r.contents.match(/\(\?\)/g) || []).length;
+      say('✓ Read ' + r.lines + ' line' + (r.lines === 1 ? '' : 's') + '. <b>Please check every line against your book before saving.</b> Photos can be misread.' +
+        (unsure ? ' ' + unsure + ' line' + (unsure === 1 ? ' is' : 's are') + ' marked (?).' : '') + (r.truncated ? ' The list was very long, so it was cut short.' : ''));
+    } catch (e) {
+      say(esc(e.message) + ((e.code === 'LIMIT_REACHED' || e.code === 'LIMIT_REACHED_MONTH') ? ' <button type="button" class="link" data-act="seeplans" style="padding:0">See plans</button>' : ''), true);
+    }
+    if (btn) btn.disabled = false;
+    var inp = $('#tb-photo'); if (inp) inp.value = '';
+  }
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'tb-photo') readPhotos(Array.prototype.slice.call(e.target.files || []));
+  });
   async function saveTextbook(btn) {
     var id = btn.getAttribute('data-id');
     var levels = $('#tb-all').checked ? ['All'] : Array.prototype.slice.call(document.querySelectorAll('.tb-lv:checked')).map(function (c) { return c.value; });
@@ -849,6 +906,7 @@
     },
     addtextbook: function () { modal(tbFormHtml(null), true); },
     savetextbook: saveTextbook,
+    tbphoto: function () { var i = $('#tb-photo'); if (i) i.click(); },
     tbmore: function () { tbShowAll = true; drawTbList(); },
     tbdetail: function (el) { showTbDetail(el.getAttribute('data-id')); },
     tbedit: async function (el) {

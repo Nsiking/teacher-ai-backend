@@ -61,16 +61,19 @@ function sendFile(res, file, type) {
     sendJson(res, 404, { error: 'Not found.' });
   }
 }
-function readBody(req) {
+function readBody(req, limit) {
+  const max = limit || MAX_BODY;
   return new Promise((resolve, reject) => {
-    let size = 0;
+    let size = 0, over = false;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY) { reject(new HttpError(413, 'Request is too large.')); req.destroy(); return; }
+      if (over) { if (size > max * 4) req.destroy(); return; }   // keep reading so we can answer properly; stop only for absurd sizes
+      if (size > max) { over = true; chunks.length = 0; return; }
       chunks.push(c);
     });
     req.on('end', () => {
+      if (over) return reject(new HttpError(413, 'That is too large. Please try a smaller photo.', 'TOO_LARGE'));
       if (!chunks.length) return resolve({});
       try {
         const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -303,7 +306,7 @@ add('DELETE', '/api/library/:id', { auth: true }, (ctx) => {
 
 // ------------------------------------------------------------------ classroom record
 require('./src/classroom').register(add);
-textbooks.register(add);
+textbooks.register(add, { rateLimit, usageInfo });
 require('./src/timetable').register(add, { rateLimit });
 
 // ------------------------------------------------------------------ admin (needs ADMIN_KEY)
@@ -435,7 +438,7 @@ const server = http.createServer(async (req, res) => {
 
     const params = {};
     route.keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
-    const body = (req.method === 'GET') ? {} : await readBody(req);
+    const body = (req.method === 'GET') ? {} : await readBody(req, route.opts.maxBody);
     const ctx = { req, res, ip: clientIp(req), query: Object.fromEntries(url.searchParams), params, body, user: null };
     if (route.opts.admin) { rateLimit(`admin:${ctx.ip}`, 60, 15 * 60 * 1000); requireAdmin(req); }
     if (route.opts.auth) ctx.user = auth.authenticate(req);

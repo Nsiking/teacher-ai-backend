@@ -4,7 +4,7 @@ const { HttpError } = require('./util');
 const API_URL = process.env.AI_API_URL || 'https://api.anthropic.com/v1/messages';
 
 // Returns { text, inputTokens, outputTokens, model, truncated }
-async function generate({ system, user, maxTokens, model, mockText }) {
+async function generate({ system, user, maxTokens, model, mockText, images }) {
   if (process.env.AI_MOCK === '1') {
     return { text: mockText || '[TEST MODE] Fake AI answer.', inputTokens: 0, outputTokens: 0, model: 'mock', truncated: false };
   }
@@ -26,7 +26,12 @@ async function generate({ system, user, maxTokens, model, mockText }) {
         model,
         max_tokens: maxTokens,
         system,
-        messages: [{ role: 'user', content: user }],
+        messages: [{
+          role: 'user',
+          content: images && images.length
+            ? images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })).concat([{ type: 'text', text: user }])
+            : user,
+        }],
       }),
       signal: ctrl.signal,
     });
