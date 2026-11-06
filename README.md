@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 11)
+# SmartClass Teacher AI - Backend + teacher app screens (version 12)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -64,6 +64,10 @@ library, no footer. Every number can be changed with a setting in Render (see .e
 A teacher who goes back to Free keeps all classes and pupils. Only adding more is blocked.
 Activate a plan on /admin (Give a user a paid plan). School licences: /admin > "School licence" gives many teachers
 a plan at once. A 7-day trial = give the plan for 7 days.
+
+## Light and dark look
+Account > Appearance: Automatic (follows the phone), Light or Dark. The choice is remembered, applied before the screen
+draws (no flash), and kept after logging out. Colours were measured so text is easy to read in both looks.
 
 ## Contents from a photo
 When adding or editing a textbook, "Read it from a photo" lets a teacher photograph the contents page (up to 3 photos).

@@ -125,6 +125,13 @@
     catch (e) { S.meta = jget('tt_meta', null); }
     if (!S.meta) S.meta = { classes: ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6', 'JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3'], terms: ['First Term', 'Second Term', 'Third Term'], limits: { free: 3, paid: 30 } };
   }
+  // ---- light / dark choice (Automatic follows the phone)
+  function getTheme() { var t = ''; try { t = localStorage.getItem('tt_theme'); } catch (e) { /* ignore */ } return t === 'light' || t === 'dark' ? t : 'auto'; }
+  function applyTheme(t) {
+    var el = document.documentElement;
+    if (t === 'light' || t === 'dark') el.setAttribute('data-theme', t); else el.removeAttribute('data-theme');
+  }
+  applyTheme(getTheme());
   function plansInfo() {
     return (S.meta && S.meta.plansInfo) || {
       monthly: { label: 'Monthly', price: 1500, days: 30 },
@@ -787,6 +794,8 @@
       (isPaid() && u.planExpiresAt ? '<div class="kv"><span>Valid until</span><b>' + fmtDate(u.planExpiresAt) + '</b></div>' : '') +
       '<div class="kv"><span>Used today</span><b>' + us.used + ' of ' + us.limit + '</b></div>' +
       (us.monthlyLimit ? '<div class="kv"><span>Used this month</span><b>' + (us.monthlyUsed || 0) + ' of ' + us.monthlyLimit + '</b></div>' : '') + '</div>' +
+      '<div class="card"><b>Appearance</b><p class="sub">Choose how the app looks. Automatic follows your phone.</p><div class="seg3">' +
+      [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="settheme" data-t="' + x[0] + '" class="' + (getTheme() === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div></div>' +
       plansCard() +
       '<div class="card"><b>My textbooks</b><p class="sub">Add the books your school uses, with their contents. The AI will cite them exactly in lesson notes, schemes, questions and worksheets.</p><button class="btn alt" data-go="textbooks">Open my textbooks</button></div>' +
       (S.installEvt ? '<div class="card"><b>Install the app</b><p class="sub">Add it to your home screen.</p><button class="btn alt" data-act="install">Install</button></div>' : '') +
@@ -895,6 +904,12 @@
     deleteitem: confirmDelete,
     dodelete: doDelete,
     closemodal: closeModal,
+    settheme: function (el) {
+      var t = el.getAttribute('data-t');
+      try { if (t === 'auto') localStorage.removeItem('tt_theme'); else localStorage.setItem('tt_theme', t); } catch (e) { /* ignore */ }
+      applyTheme(t);
+      Array.prototype.forEach.call(document.querySelectorAll('.seg3 button'), function (b) { b.classList.toggle('on', b === el); });
+    },
     ttagain: async function (btn) {
       var m = currentItem && currentItem.meta; if (!m) return;
       btn.disabled = true;
