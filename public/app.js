@@ -184,6 +184,7 @@
     switch (name) {
       case 'new': return viewForm(arg);
       case 'item': return viewItem(Number(arg));
+      case 'formats': case 'format': return TT.views.formats ? TT.views.formats(parts) : viewHome();
       case 'timetable': return TT.views.timetable ? TT.views.timetable(parts) : viewHome();
       case 'classes': return TT.views.classes ? TT.views.classes(parts) : viewHome();
       case 'class': return TT.views.class ? TT.views.class(parts) : viewHome();
@@ -344,7 +345,7 @@
       body += '<label for="f-extras">Anything else? (optional)</label><input id="f-extras" maxlength="400" placeholder="' +
         ((kind === 'lesson-note' || kind === 'lesson-plan') ? 'e.g. include group work, use local examples' : kind === 'questions' ? 'e.g. WAEC style, include calculations' : 'e.g. include a puzzle') + '">';
     }
-    if (TB_KINDS.indexOf(kind) > -1) { selTb = []; tbAll = []; tbShowAll = false; body = body.replace('<label for="f-extras">', tbPickerHtml() + '<label for="f-extras">'); }
+    if (TB_KINDS.indexOf(kind) > -1) { selTb = []; tbAll = []; tbShowAll = false; body = body.replace('<label for="f-extras">', (FORMAT_KINDS.indexOf(kind) > -1 ? fmtPickerHtml() : '') + tbPickerHtml() + '<label for="f-extras">'); }
     shell(
       '<h1>' + def.icon + ' ' + def.label + '</h1><p class="sub">' + def.blurb + '. It takes about a minute.</p>' +
       '<div class="card">' + body +
@@ -354,6 +355,7 @@
     );
     if (kind === 'report-comments') fillClassBox();
     if (TB_KINDS.indexOf(kind) > -1) loadTbList();
+    if (FORMAT_KINDS.indexOf(kind) > -1) loadFormatPicker(kind);
   }
   async function fillClassBox() {
     var box = $('#cls-inner'); if (!box) return;
@@ -393,6 +395,20 @@
   }
   // ---------------------------------------------------------------- textbooks
   var TB_KINDS = ['lesson-note', 'lesson-plan', 'scheme-of-work', 'questions', 'worksheet'];
+  var FORMAT_KINDS = ['lesson-note', 'lesson-plan', 'scheme-of-work'];
+  function fmtPickerHtml() {
+    return '<div class="tb-box"><label for="f-format">Layout</label><select id="f-format"><option value="">Standard format</option></select>' +
+      '<p class="hint" style="margin:4px 0 0">Use your school\'s own layout. <button type="button" class="link" data-go="formats" style="padding:0">Add or change my school formats</button></p></div>';
+  }
+  async function loadFormatPicker(kind) {
+    var sel = $('#f-format'); if (!sel) return;
+    try {
+      var r = await api('GET', '/api/formats?type=' + encodeURIComponent(kind));
+      sel = $('#f-format'); if (!sel) return;
+      var ok = r.formats.filter(function (f) { return f.status === 'approved'; });
+      sel.innerHTML = '<option value="">Standard format</option>' + ok.map(function (f) { return '<option value="' + f.id + '"' + (f.isDefault ? ' selected' : '') + '>' + esc(f.name) + (f.isDefault ? ' (my default)' : '') + '</option>'; }).join('');
+    } catch (e) { /* offline: the standard format still works */ }
+  }
   var selTb = [], tbAll = [], tbShowAll = false, tbTimer = null;
   function tbPickerHtml() {
     return '<div class="tb-box"><label>Textbook references (optional)</label>' +
@@ -478,6 +494,17 @@
     var g = c.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
     return { mediaType: 'image/jpeg', data: c.toDataURL('image/jpeg', quality).split(',')[1] };
   }
+  // Shrinks 1 to 3 photos so they upload quickly. Returns the pictures ready to send.
+  async function prepareImages(files) {
+    var sizes = [[1500, 0.78], [1300, 0.65], [1100, 0.55]], images = [];
+    for (var k = 0; k < sizes.length; k++) {
+      images = [];
+      for (var j = 0; j < files.length; j++) images.push(await shrinkPhoto(files[j], sizes[k][0], sizes[k][1]));
+      var total = images.reduce(function (t, im) { return t + im.data.length; }, 0);
+      if (total < 3000000 && images.every(function (im) { return im.data.length < 1900000; })) break;
+    }
+    return images;
+  }
   async function readPhotos(files) {
     var st = $('#tb-photo-status'); if (!st) return;
     function say(html, err) { st.className = 'hint' + (err ? ' err' : ''); st.innerHTML = html; }
@@ -488,13 +515,7 @@
     say('Reading the photo… this can take up to a minute.');
     var btn = $('[data-act=tbphoto]'); if (btn) btn.disabled = true;
     try {
-      var sizes = [[1500, 0.78], [1300, 0.65], [1100, 0.55]], images = [];
-      for (var k = 0; k < sizes.length; k++) {
-        images = [];
-        for (var j = 0; j < files.length; j++) images.push(await shrinkPhoto(files[j], sizes[k][0], sizes[k][1]));
-        var total = images.reduce(function (t, im) { return t + im.data.length; }, 0);
-        if (total < 3000000 && images.every(function (im) { return im.data.length < 1900000; })) break;
-      }
+      var images = await prepareImages(files);
       var r = await api('POST', '/api/textbooks/read-contents', { images: images, title: ($('#tb-title') || {}).value || '' });
       if (r.usage) { S.usage = r.usage; jset('tt_usage', r.usage); }
       var box = $('#tb-contents');
@@ -581,13 +602,14 @@
     if (kind === 'scheme-of-work') {
       if (!v('f-subject')) return err('Please enter the subject.');
       jset('tt_prefs', Object.assign(jget('tt_prefs', {}), { subject: v('f-subject'), className: v('f-class'), term: v('f-term') }));
-      return { subject: v('f-subject'), className: v('f-class'), term: v('f-term'), weeks: v('f-weeks'), periodsPerWeek: v('f-periods'), topics: v('f-topics'), extras: v('f-extras'), textbookIds: selTb.slice() };
+      return { subject: v('f-subject'), className: v('f-class'), term: v('f-term'), weeks: v('f-weeks'), periodsPerWeek: v('f-periods'), topics: v('f-topics'), extras: v('f-extras'), textbookIds: selTb.slice(), formatId: Number(v('f-format')) || undefined };
     }
     if (!v('f-subject')) return err('Please enter the subject.');
     if (!v('f-topic')) return err('Please enter the topic.');
     jset('tt_prefs', Object.assign(jget('tt_prefs', {}), { subject: v('f-subject'), className: v('f-class'), term: v('f-term') || undefined }));
     var b = { subject: v('f-subject'), className: v('f-class'), topic: v('f-topic'), extras: v('f-extras') };
     if (TB_KINDS.indexOf(kind) > -1) b.textbookIds = selTb.slice();
+    if (FORMAT_KINDS.indexOf(kind) > -1) b.formatId = Number(v('f-format')) || undefined;
     if (kind === 'lesson-note' || kind === 'lesson-plan') { b.term = v('f-term'); b.week = v('f-week'); b.duration = v('f-duration'); }
     if (kind === 'lesson-plan') b.method = v('f-method');
     if (kind === 'questions') { b.type = v('f-type'); b.difficulty = v('f-diff'); if (b.type !== 'theory') b.objectiveCount = v('f-obj'); if (b.type !== 'objective') b.theoryCount = v('f-th'); }
@@ -617,6 +639,7 @@
       S.usage = r.usage; jset('tt_usage', r.usage);
       putItem({ id: r.id, kind: r.kind, title: r.title, content: r.content, createdAt: Date.now(), updatedAt: Date.now() });
       if (r.truncated) sessionStorage.setItem('tt_trunc', String(r.id));
+      if (r.formatCheck && !r.formatCheck.ok) sessionStorage.setItem('tt_fmtcheck', JSON.stringify(Object.assign({ id: r.id }, r.formatCheck)));
       hideBusy(); location.hash = '#/item/' + r.id;
     } catch (e) {
       hideBusy(); btn.disabled = false;
@@ -672,6 +695,15 @@
     }
     return '<div class="doc">' + window.md(it.content) + '</div>';
   }
+  function fmtWarning(id) {
+    var c = null; try { c = JSON.parse(sessionStorage.getItem('tt_fmtcheck') || 'null'); } catch (e) { /* ignore */ }
+    if (!c || c.id !== id) return '';
+    var bits = [];
+    if (c.missing && c.missing.length) bits.push('these sections are missing: ' + c.missing.map(esc).join(', '));
+    if (c.missingHeader && c.missingHeader.length) bits.push('these top lines are missing: ' + c.missingHeader.map(esc).join(', '));
+    if (c.ordered === false) bits.push('some sections are not in your format\'s order');
+    return '<div class="warn no-print"><b>Check this against your school format.</b> ' + bits.join('; ') + '. Use Edit to add them, or generate again.</div>';
+  }
   var currentItem = null;
   async function viewItem(id) {
     shell('<div class="empty">Opening…</div>', { title: 'Saved item', back: 'library' });
@@ -686,6 +718,7 @@
     var canShare = !!navigator.share || (IS_NATIVE && !!plugin('Share'));
     shell(
       (truncated ? '<div class="warn no-print">This answer may be cut short because it was very long. Try again with fewer items.</div>' : '') +
+      fmtWarning(id) +
       '<div class="actions no-print">' +
       '<button class="btn small" data-act="copyitem">Copy</button>' +
       (canShare ? '<button class="btn small alt" data-act="shareitem">Share</button>' : '') +
@@ -695,7 +728,7 @@
       (it.kind === 'timetable' && it.meta ? '<button class="btn small alt" data-act="ttagain">Another arrangement</button>' : '') +
       '<button class="btn small danger" data-act="deleteitem">Delete</button></div>' +
       '<div id="item-body">' + itemBodyHtml(it) + '</div>' +
-      '<p class="hint no-print">Saved in your library. ' + fmtDate(it.createdAt) + '</p>',
+      '<p class="hint no-print">Saved in your library. ' + fmtDate(it.createdAt) + (it.meta && it.meta.formatName ? ' · Format: ' + esc(it.meta.formatName) : '') + '</p>',
       { title: it.title, back: 'library' }
     );
   }
@@ -797,6 +830,7 @@
       '<div class="card"><b>Appearance</b><p class="sub">Choose how the app looks. Automatic follows your phone.</p><div class="seg3">' +
       [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="settheme" data-t="' + x[0] + '" class="' + (getTheme() === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div></div>' +
       plansCard() +
+      '<div class="card"><b>My school formats</b><p class="sub">Make the app write schemes of work, lesson plans and lesson notes in your school\'s own layout. You approve each format before it is used.</p><button class="btn alt" data-go="formats">Open my school formats</button></div>' +
       '<div class="card"><b>My textbooks</b><p class="sub">Add the books your school uses, with their contents. The AI will cite them exactly in lesson notes, schemes, questions and worksheets.</p><button class="btn alt" data-go="textbooks">Open my textbooks</button></div>' +
       (S.installEvt ? '<div class="card"><b>Install the app</b><p class="sub">Add it to your home screen.</p><button class="btn alt" data-act="install">Install</button></div>' : '') +
       '<div class="card"><b>Change password</b>' +
@@ -953,7 +987,7 @@
 
   Object.keys(TT.actions).forEach(function (k) { actions[k] = TT.actions[k]; });
   TT.api = api; TT.shell = shell; TT.esc = esc; TT.toast = toast; TT.modal = modal; TT.closeModal = closeModal;
-  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid;
+  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid; TT.prepareImages = prepareImages;
   TT.classNames = function () { return (S.meta && S.meta.classes) || []; };
   // Fills the subject and class for the next lesson plan or note (used from the timetable).
   TT.prefill = function (subject, className) {

@@ -1,6 +1,7 @@
 'use strict';
 const { HttpError, text, int } = require('./util');
 const books = require('./textbooks');
+const formats = require('./formats');
 
 const CLASSES = [
   'Nursery 1', 'Nursery 2', 'Nursery 3',
@@ -104,14 +105,14 @@ Three to five lines.
 ## Assignment
 Two or three tasks for home.`;
 
-  return {
+  return formats.applyTo({
     prompt,
     maxTokens: 4500,
     title: `${subject}: ${topic} (${cls})`,
     meta: { subject, className: cls, topic, subTopic, term, week, duration, textbooks: tbs.map((t) => t.id) },
     textbooks: tbs,
     mock: `# LESSON NOTE\n\n[TEST MODE] Sample lesson note for ${subject}, ${cls}: ${topic}.\n\n## Behavioural Objectives\n1. State the meaning of the topic.\n2. Give two examples.` + (tbs.length ? '\n\n## Reference Materials\n- [BOOK1]' : ''),
-  };
+  }, { format: opts && opts.format, type: 'lesson-note', tbs, duration });
 }
 
 // ------------------------------------------------------------------ Lesson plan
@@ -187,14 +188,14 @@ Rules for the table: keep cell text short, never use a line break inside a cell,
 
   const stages = ['Introduction', 'Development 1', 'Development 2', 'Development 3', 'Practice', 'Evaluation', 'Conclusion'];
   const rows = stages.map((st) => `| ${st} | 5 mins | [TEST MODE] Teacher guides | ${Lc} respond | Questioning |`).join('\n');
-  return {
+  return formats.applyTo({
     prompt,
     maxTokens: 3500,
     title: `${subject} lesson plan: ${topic} (${cls})`,
     meta: { subject, className: cls, topic, subTopic, term, week, duration, textbooks: tbs.map((t) => t.id) },
     textbooks: tbs,
     mock: `# LESSON PLAN\n\n| Item | Details |\n|---|---|\n| Subject | ${subject} |\n| Class | ${cls} |\n| Topic | ${topic} |\n| Duration | ${duration} minutes |\n\n## Learning Objectives\n1. State the meaning of the topic.\n2. Give two examples.\n\n## Reference Materials\n` + (tbs.length ? '- [BOOK1]' : '- NERDC curriculum') + `\n\n## Lesson Stages\n\n| Stage | Time | Teacher's Activity | ${Lc}' Activity | Method and Aids |\n|---|---|---|---|---|\n${rows}\n\n## Teacher's Reflection\nWhat went well: ........`,
-  };
+  }, { format: opts && opts.format, type: 'lesson-plan', tbs, duration });
 }
 
 // ------------------------------------------------------------------ Questions
@@ -342,14 +343,14 @@ Finish with one italic line: *Check this scheme against your school's approved c
   const rows = Array.from({ length: weeks }, (_, i) =>
     `| ${i + 1} | [TEST MODE] Sample topic ${i + 1} | 1) State it 2) Give examples | Teacher explains, ${L} practise in groups | Charts, textbook | Class exercise |${tbs.length ? ' [B1] Ch. ' + (i + 1) + ' |' : ''}`).join('\n');
 
-  return {
+  return formats.applyTo({
     prompt,
     maxTokens: Math.min(8000, 1800 + weeks * 380),
     title: `${subject} scheme of work: ${term} (${cls})`,
     meta: { subject, className: cls, term, weeks, periodsPerWeek: periods, textbooks: tbs.map((t) => t.id) },
     textbooks: tbs,
     mock: `# SCHEME OF WORK\n\n| Item | Details |\n|---|---|\n| School | ........ |\n| Subject | ${subject} |\n| Class | ${cls} |\n| Term | ${term} |\n| Number of weeks | ${weeks} |\n\n## Scheme\n\n| Week | Topic and Sub-topics | Learning Objectives | Teaching and Learning Activities | Instructional Materials | Evaluation |${tbs.length ? ' Reference |' : ''}\n|---|---|---|---|---|---|${tbs.length ? '---|' : ''}\n${rows}\n\n*Check this scheme against your school's approved curriculum before use.*`,
-  };
+  }, { format: opts && opts.format, type: 'scheme-of-work', tbs, weeks });
 }
 
 // ------------------------------------------------------------------ Marking assistance

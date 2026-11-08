@@ -141,6 +141,19 @@ CREATE TABLE IF NOT EXISTS timetable_slots (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_slots_user ON timetable_slots (user_id, day, start_min);
+CREATE TABLE IF NOT EXISTS formats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  spec TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  source TEXT NOT NULL DEFAULT 'manual',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_formats_user ON formats (user_id, type);
 CREATE TABLE IF NOT EXISTS scores (
   assessment_id INTEGER NOT NULL,
   pupil_id INTEGER NOT NULL,

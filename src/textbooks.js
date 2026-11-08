@@ -285,4 +285,4 @@ function register(add, helpers) {
   });
 }
 
-module.exports = { register, resolveForUser, promptBlock, applyRefs, citation, shortCite, MAX_PICK };
+module.exports = { register, resolveForUser, promptBlock, applyRefs, citation, shortCite, MAX_PICK, decodeImage, MAX_IMAGES };

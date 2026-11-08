@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 12)
+# SmartClass Teacher AI - Backend + teacher app screens (version 13)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -64,6 +64,17 @@ library, no footer. Every number can be changed with a setting in Render (see .e
 A teacher who goes back to Free keeps all classes and pupils. Only adding more is blocked.
 Activate a plan on /admin (Give a user a paid plan). School licences: /admin > "School licence" gives many teachers
 a plan at once. A 7-day trial = give the plan for 7 days.
+
+## My school formats
+Account > My school formats. A format is the layout a school uses for a scheme of work, lesson plan or lesson note:
+the title, the lines in the top block, the sections in order (paragraph, numbered list, bulleted list or table with named
+columns) and any extra rules. A teacher can start from the standard layout (free) or let the AI learn a layout from a
+sample photo or pasted text (1 generation). The AI copies only the layout, never the sample's content, and the sample is
+not kept. Nothing is used until the teacher approves it, and changing the layout needs approval again.
+In the Lesson Note, Lesson Plan and Scheme of Work forms a "Layout" choice offers Standard or an approved format
+(a default can be set). After generating, the app checks that every section and top line of the format is in the result
+and warns if not. Free keeps 1 format, Teacher Plus keeps 15 (FREE_MAX_FORMATS, PAID_MAX_FORMATS).
+Test it:  node tests/format-test.js
 
 ## Light and dark look
 Account > Appearance: Automatic (follows the phone), Light or Dark. The choice is remembered, applied before the screen

@@ -12,6 +12,7 @@ const ai = require('./src/ai');
 const prompts = require('./src/prompts');
 const backup = require('./src/backup');
 const textbooks = require('./src/textbooks');
+const formats = require('./src/formats');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const MAX_BODY = 300 * 1024;
@@ -127,7 +128,7 @@ function deleteUserData(id) {
   db.prepare('DELETE FROM items WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM usage WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM gen_log WHERE user_id = ?').run(id);
-  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes', 'timetable_slots']) {
+  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes', 'timetable_slots', 'formats']) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id);
   }
   db.prepare('DELETE FROM textbooks WHERE owner_user_id = ?').run(id);
@@ -201,7 +202,8 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
   const plan = plans.effective(user);
 
   const chosenBooks = textbooks.resolveForUser(user, ctx.body.textbookIds);
-  const spec = def.build(ctx.body, { plan, maxPupils: plans.maxPupils(plan), maxAnswers: plans.maxAnswers(plan), textbooks: chosenBooks });
+  const chosenFormat = formats.resolveForGenerate(user, ctx.body.formatId, ctx.params.kind);
+  const spec = def.build(ctx.body, { plan, maxPupils: plans.maxPupils(plan), maxAnswers: plans.maxAnswers(plan), textbooks: chosenBooks, format: chosenFormat });
   rateLimit(`gen:${user.id}`, parseInt(process.env.GEN_PER_MINUTE, 10) || 6, 60 * 1000);
   const limit = plans.dailyLimit(plan);
   const mLimit = plans.monthlyLimit(plan);
@@ -213,7 +215,7 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
     throw new HttpError(429, `You have used all ${limit} generations for today. They reset at midnight, or upgrade for more.`, 'LIMIT_REACHED');
   }
 
-  let out, content, extra = {};
+  let out, content, extra = {}, formatCheck = null;
   try {
     out = await ai.generate({
       system: prompts.SYSTEM,
@@ -224,6 +226,7 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
     });
     content = out.text;
     if (spec.textbooks && spec.textbooks.length) content = textbooks.applyRefs(content, spec.textbooks);
+    if (spec.format) formatCheck = formats.checkOutput(spec.format.spec, content);
     if (spec.post) {
       const p = spec.post(content);
       content = p.content;
@@ -247,6 +250,7 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
     content,
     truncated: out.truncated,
     ...extra,
+    formatCheck,
     usage: usageInfo(user),
   };
 });
@@ -307,6 +311,7 @@ add('DELETE', '/api/library/:id', { auth: true }, (ctx) => {
 // ------------------------------------------------------------------ classroom record
 require('./src/classroom').register(add);
 textbooks.register(add, { rateLimit, usageInfo });
+formats.register(add, { rateLimit, usageInfo });
 require('./src/timetable').register(add, { rateLimit });
 
 // ------------------------------------------------------------------ admin (needs ADMIN_KEY)
@@ -401,6 +406,7 @@ const STATIC = {
   '/md.js': ['md.js', 'application/javascript; charset=utf-8'],
   '/classes.js': ['classes.js', 'application/javascript; charset=utf-8'],
   '/timetable.js': ['timetable.js', 'application/javascript; charset=utf-8'],
+  '/formats.js': ['formats.js', 'application/javascript; charset=utf-8'],
   '/sw.js': ['sw.js', 'application/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],

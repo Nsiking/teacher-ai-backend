@@ -193,3 +193,11 @@ a.btn { text-decoration: none; }
 .seg3 { display: flex; gap: 8px; margin-top: 10px; }
 .seg3 button { flex: 1; min-height: 46px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
 .seg3 button.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+
+/* school formats */
+.fs { border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin-bottom: 10px; background: var(--card); display: grid; gap: 8px; }
+.fs .fs-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .75rem; font-weight: 700; margin-left: 6px; vertical-align: middle; }
+.badge.ok { background: var(--brand-soft); color: var(--brand); }
+.badge.def { background: var(--brand); color: var(--brand-ink); }
+.badge.draft { border: 1px solid var(--mute); color: var(--mute); }
