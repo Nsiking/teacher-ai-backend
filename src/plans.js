@@ -37,6 +37,7 @@ function maxAnswers(plan) { return isPaid(plan) ? 15 : 3; }
 function classLimits(plan) { return isPaid(plan) ? LIMITS.paid : LIMITS.free; }
 function maxTextbooks(plan) { return isPaid(plan) ? num(process.env.PAID_MAX_TEXTBOOKS, 30) : num(process.env.FREE_MAX_TEXTBOOKS, 5); }
 function maxFormats(plan) { return isPaid(plan) ? num(process.env.PAID_MAX_FORMATS, 15) : num(process.env.FREE_MAX_FORMATS, 1); }
+function maxPacks(plan) { return isPaid(plan) ? num(process.env.PAID_MAX_PACKS, 10) : num(process.env.FREE_MAX_PACKS, 0); }
 function libraryLimit(plan) { return isPaid(plan) ? LIMITS.paid.library : LIMITS.free.library; }
 function modelFor(plan) {
   return isPaid(plan)
@@ -68,6 +69,6 @@ function refund(userId) {
 }
 
 module.exports = {
-  today, effective, isPaid, dailyLimit, monthlyLimit, maxPupils, maxAnswers, classLimits, libraryLimit, maxTextbooks, maxFormats, modelFor,
+  today, effective, isPaid, dailyLimit, monthlyLimit, maxPupils, maxAnswers, classLimits, libraryLimit, maxTextbooks, maxFormats, maxPacks, modelFor,
   used, monthlyUsed, reserve, refund, PAID_PLANS, PLAN_INFO, FREE_DAILY, FREE_MONTHLY, PAID_DAILY, LIMITS,
 };

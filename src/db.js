@@ -154,6 +154,17 @@ CREATE TABLE IF NOT EXISTS formats (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_formats_user ON formats (user_id, type);
+CREATE TABLE IF NOT EXISTS packs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  class_name TEXT NOT NULL,
+  data TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_packs_user ON packs (user_id);
 CREATE TABLE IF NOT EXISTS scores (
   assessment_id INTEGER NOT NULL,
   pupil_id INTEGER NOT NULL,

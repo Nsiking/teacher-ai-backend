@@ -14,6 +14,7 @@ const backup = require('./src/backup');
 const textbooks = require('./src/textbooks');
 const formats = require('./src/formats');
 const aihealth = require('./src/aihealth');
+const packs = require('./src/packs');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const MAX_BODY = 300 * 1024;
@@ -129,7 +130,7 @@ function deleteUserData(id) {
   db.prepare('DELETE FROM items WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM usage WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM gen_log WHERE user_id = ?').run(id);
-  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes', 'timetable_slots', 'formats']) {
+  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes', 'timetable_slots', 'formats', 'packs']) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id);
   }
   db.prepare('DELETE FROM textbooks WHERE owner_user_id = ?').run(id);
@@ -205,6 +206,8 @@ add('POST', '/api/generate/:kind', { auth: true }, async (ctx) => {
   const chosenBooks = textbooks.resolveForUser(user, ctx.body.textbookIds);
   const chosenFormat = formats.resolveForGenerate(user, ctx.body.formatId, ctx.params.kind);
   const spec = def.build(ctx.body, { plan, maxPupils: plans.maxPupils(plan), maxAnswers: plans.maxAnswers(plan), textbooks: chosenBooks, format: chosenFormat });
+  const packLink = packs.linkMeta(user, ctx.body, ctx.params.kind);
+  if (packLink) spec.meta = Object.assign({}, spec.meta, packLink);
   rateLimit(`gen:${user.id}`, parseInt(process.env.GEN_PER_MINUTE, 10) || 6, 60 * 1000);
   const limit = plans.dailyLimit(plan);
   const mLimit = plans.monthlyLimit(plan);
@@ -313,6 +316,7 @@ add('DELETE', '/api/library/:id', { auth: true }, (ctx) => {
 require('./src/classroom').register(add);
 textbooks.register(add, { rateLimit, usageInfo });
 formats.register(add, { rateLimit, usageInfo });
+packs.register(add, { rateLimit, usageInfo });
 require('./src/quality').register(add, { rateLimit, usageInfo, isOpenable: (user, id) => { const open = openableIds(user); return !open || open.has(id); } });
 require('./src/timetable').register(add, { rateLimit });
 
@@ -426,6 +430,7 @@ const STATIC = {
   '/classes.js': ['classes.js', 'application/javascript; charset=utf-8'],
   '/timetable.js': ['timetable.js', 'application/javascript; charset=utf-8'],
   '/formats.js': ['formats.js', 'application/javascript; charset=utf-8'],
+  '/packs.js': ['packs.js', 'application/javascript; charset=utf-8'],
   '/sw.js': ['sw.js', 'application/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
   '/icon.svg': ['icon.svg', 'image/svg+xml'],

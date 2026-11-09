@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 17)
+# SmartClass Teacher AI - Backend + teacher app screens (version 18)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -76,6 +76,17 @@ Lesson notes and plans have a "Level of detail" choice (Simple, Standard, Detail
 "Check" on a lesson note, plan, scheme, question paper or worksheet: the AI re-does every calculation, checks every answer and
 lists real mistakes (where, what is wrong, the fix). "Make a corrected copy" saves a new item and keeps the original.
 Each check and each corrected copy counts as 1 generation.
+
+## Term Pack (Teacher Plus)
+Home > Term Pack. A pack holds a subject and class, the textbook(s), the topics for each of the three terms, the weeks in each
+term, and which school formats, level of detail and lesson time to use. The AI can suggest the split of topics across the
+terms (1 generation) from a textbook's contents, a pasted syllabus, or the standard curriculum; the teacher edits it.
+"Make the 3 schemes of work" makes one scheme per term (1 generation each). The app then reads the weeks of each scheme
+(any layout with a Week column) and lists them; the teacher ticks weeks (revision, test and exam weeks are unticked) and makes
+a lesson plan or lesson note for each (1 generation each), built from that week's topic and objectives. Every document is saved
+in the Library and linked to the pack (meta packId, packTerm, packWeek), so progress is saved and a batch can stop and
+carry on tomorrow. "Word: all lesson plans / notes" makes one Word file for the whole term. Free plan: not available
+(FREE_MAX_PACKS=0); Teacher Plus keeps 10 packs (PAID_MAX_PACKS). Test it:  node tests/pack-test.js
 
 ## Copy and Share give clean text
 Copy and Share turn the document into clean readable text (no #, **, |---| or code fences): headings in capitals, tables as

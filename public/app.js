@@ -21,6 +21,7 @@
     'worksheet': { code: 'worksheet', label: 'Worksheet', icon: '🧩', blurb: 'Printable classroom activities', busy: ['Designing the activities…', 'Adding answer spaces…', 'Writing the answer key…'] },
     'marking': { code: 'marking', label: 'Marking Assistant', icon: '✅', blurb: 'Suggested marks and feedback', busy: ['Reading the answers…', 'Comparing with the marking guide…', 'Giving marks and feedback…'] },
     'report-comments': { code: 'report_comments', label: 'Report Comments', icon: '💬', blurb: 'Comments for the whole class', busy: ['Reading the scores…', 'Writing each comment…', 'Polishing the wording…'] }
+    ,'term-pack': { code: 'term_pack', label: 'Term Pack', icon: '📦', blurb: 'A whole term: schemes and a lesson for every week', route: 'packs', busy: [] }
     ,'timetable': { code: 'timetable', label: 'Time-Table', icon: '🕒', blurb: 'Your weekly periods and class timetables', route: 'timetable', busy: [] }
   };
   var CODE_TO_KEY = {};
@@ -184,6 +185,7 @@
     switch (name) {
       case 'new': return viewForm(arg);
       case 'item': return viewItem(Number(arg));
+      case 'packs': case 'pack': return TT.views.packs ? TT.views.packs(parts) : viewHome();
       case 'formats': case 'format': return TT.views.formats ? TT.views.formats(parts) : viewHome();
       case 'timetable': return TT.views.timetable ? TT.views.timetable(parts) : viewHome();
       case 'classes': return TT.views.classes ? TT.views.classes(parts) : viewHome();
@@ -769,16 +771,19 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
     return Promise.resolve();
   }
+  // Builds a Word file from ready HTML. Used for one document and for a whole term.
+  function wordFile(title, html, land) {
+    var doc = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>' + esc(title) +
+      '</title><style>' + (land ? '@page WordSection1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:36pt}div.WordSection1{page:WordSection1}' : '') +
+      'body{font-family:Calibri,Arial,sans-serif;font-size:' + (land ? '10' : '12') + 'pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:4px;vertical-align:top}th{background:#eee}h1{text-align:center;font-size:16pt}h2{font-size:13pt}pre.codeblock{font-family:Consolas,Courier New,monospace;font-size:10pt;border:1px solid #444;padding:6px;white-space:pre}</style></head><body><div class="WordSection1">' + html + '</div></body></html>';
+    saveFile((String(title).replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'teacher-ai') + '.doc', 'application/msword', '\ufeff' + doc);
+  }
   function downloadWord(it) {
     var html = it.kind === 'report_comments' && parseComments(it.content)
       ? '<h1>' + esc(it.title) + '</h1>' + parseComments(it.content).map(function (c) { return '<p><b>' + esc(c.name) + '</b><br>' + esc(c.comment) + '</p>'; }).join('')
       : window.md(it.content);
     if (!isPaid()) html += '<p style="margin-top:24pt;color:#777777;font-size:9pt">Made with SmartClass Teacher AI (free plan)</p>';
-    var land = it.kind === 'scheme_of_work' || it.kind === 'timetable';
-    var doc = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>' + esc(it.title) +
-      '</title><style>' + (land ? '@page WordSection1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:36pt}div.WordSection1{page:WordSection1}' : '') +
-      'body{font-family:Calibri,Arial,sans-serif;font-size:' + (land ? '10' : '12') + 'pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:4px;vertical-align:top}th{background:#eee}h1{text-align:center;font-size:16pt}h2{font-size:13pt}pre.codeblock{font-family:Consolas,Courier New,monospace;font-size:10pt;border:1px solid #444;padding:6px;white-space:pre}</style></head><body><div class="WordSection1">' + html + '</div></body></html>';
-    saveFile((it.title.replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'teacher-ai') + '.doc', 'application/msword', '\ufeff' + doc);
+    wordFile(it.title, html, it.kind === 'scheme_of_work' || it.kind === 'timetable');
   }
   function startEdit() {
     var it = currentItem;
@@ -1027,7 +1032,8 @@
 
   Object.keys(TT.actions).forEach(function (k) { actions[k] = TT.actions[k]; });
   TT.api = api; TT.shell = shell; TT.esc = esc; TT.toast = toast; TT.modal = modal; TT.closeModal = closeModal;
-  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid; TT.prepareImages = prepareImages;
+  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid; TT.prepareImages = prepareImages; TT.wordFile = wordFile; TT.showLimit = showLimit;
+  TT.setUsage = function (u) { if (u) { S.usage = u; jset('tt_usage', u); } };
   TT.classNames = function () { return (S.meta && S.meta.classes) || []; };
   // Fills the subject and class for the next lesson plan or note (used from the timetable).
   TT.prefill = function (subject, className) {
