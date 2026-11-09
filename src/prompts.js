@@ -265,7 +265,7 @@ ${examHint(cls)}${tbs.length ? '\nCover this topic the way the textbook chapter 
 Use exactly this structure:
 
 # ${subject.toUpperCase()}: ${cls}
-A small table with: Topic, ${tbs.length ? 'Reference (cite the textbook with its [BOOK1] tag), ' : ''}Time Allowed (........), Name (........), Date (........). Then one line of instructions for the ${learners(cls)}.
+A two-column table (Item | Details) with exactly these rows: Topic (fill it in), ${tbs.length ? 'Reference (cite the textbook with its [BOOK1] tag), ' : ''}Time Allowed, Name, Date. Leave the details of Time Allowed, Name and Date as ........ Then one line of instructions for the ${learners(cls)}.
 ${objectiveCount > 0 ? `
 ## Section A: Objective Questions
 Exactly ${objectiveCount} multiple-choice questions, numbered, each with four options A to D and only one correct answer. Spread the correct answers across A, B, C and D.` : ''}

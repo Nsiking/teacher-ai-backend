@@ -752,7 +752,7 @@
       var list = parseComments(it.content);
       if (list) return list.map(function (c) { return c.name + ': ' + c.comment; }).join('\n\n');
     }
-    return it.content.replace(/^\s*```[a-z]*\s*$/gmi, '');
+    return window.mdText ? window.mdText(it.content) : it.content.replace(/^\s*```[a-z]*\s*$/gmi, '');
   }
   // Saves a text file. In a browser it downloads; in the Android app it opens the share sheet
   // so the teacher can save to Drive, send on WhatsApp, open in Word, and so on.

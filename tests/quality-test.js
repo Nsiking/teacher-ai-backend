@@ -9,7 +9,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-'));
 process.env.DATA_DIR = path.join(dir, 'unit');
 const { DatabaseSync } = require('node:sqlite');
 const H = require('../src/aihealth');
-const { md } = require('../public/md.js');
+const { md, mdText } = require('../public/md.js');
 
 let pass = 0, fail = 0;
 function check(name, cond, extra) {
@@ -267,6 +267,18 @@ const NOTE = '# LESSON NOTE\n\n## Evaluation\n1. Find the LCM of 3 and 4. (12)\n
   check('a fenced diagram becomes a boxed block, keeps its spaces, and escapes markup', (html.match(/<pre class="codeblock">/g) || []).length === 2 && html.includes('USER\n  |\nAPP (&lt;b&gt;x&lt;/b&gt;)') && !/```/.test(html));
   check('text before and after the block is still a normal paragraph', /<p>Draw:<\/p>/.test(html) && /<p>Done\.<\/p>/.test(html));
   check('a fence that is never closed shows the rest as code', md('x\n```\nopen\nmore').includes('<pre class="codeblock">open\nmore</pre>'));
+
+  console.log('Clean text for Copy and Share');
+  const SRC = '# MATHEMATICS: JSS 3\n\n| Item | Details |\n|---|---|\n| Topic | **LCM** and HCF |\n| Date | ........ |\n\n**Instructions:** Answer *all* questions.\n\n## Section A\n\n1. What is 2 * 3 * 4?\n   A. 6\n- a bullet with `code`\n* another bullet\n\n---\n\n# TEACHER\'S COPY ONLY\n```\nUSER\n  |\nHARDWARE\n```\n**11.** (a) Find x. (3 marks)';
+  const T = mdText(SRC);
+  check('no markdown symbols are left (#, **, |---|, backticks, fences)', !/^#|\*\*|\|---|`/m.test(T), T);
+  check('headings: the title is in capitals, sub-headings stay as written', /^MATHEMATICS: JSS 3$/m.test(T) && /^Section A$/m.test(T) && /^TEACHER'S COPY ONLY$/m.test(T), T);
+  check('a table becomes readable rows without the separator line', /^Item {2}\| {2}Details$/m.test(T) && /^Topic {2}\| {2}LCM and HCF$/m.test(T) && /^Date {2}\| {2}\.{8}$/m.test(T), T);
+  check('bold and italic words keep their text; "2 * 3 * 4" stays as it is', /^Instructions: Answer all questions\.$/m.test(T) && T.includes('2 * 3 * 4'), T);
+  check('bullets become dots, numbered lines stay numbered', /^• a bullet with code$/m.test(T) && /^• another bullet$/m.test(T) && /^1\. What is/m.test(T), T);
+  check('the diagram text keeps its layout without the fence lines', T.includes('USER\n  |\nHARDWARE') && !/```/.test(T), T);
+  check('"---" becomes a plain line, and a bold question number loses its stars', T.includes('--------------------') && /^11\. \(a\) Find x\./m.test(T), T);
+  check('no run of 3 or more blank lines', !/\n{3,}/.test(T));
 
   await sleep(300);
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* ignore */ }

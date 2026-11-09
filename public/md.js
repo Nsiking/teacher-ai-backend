@@ -61,6 +61,31 @@
     }
     return out.join('\n');
   }
-  if (typeof module !== 'undefined' && module.exports) module.exports = { md: md, esc: esc };
-  else { root.md = md; }
+  // Clean plain text for Copy and Share (WhatsApp, SMS, notes): no #, **, |---| or code fences.
+  function stripInline(s) {
+    return s.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1')
+      .replace(/(^|[\s(])\*(?!\s)([^*]+?)\*(?=[\s).,;:!?]|$)/g, '$1$2').replace(/`([^`]+)`/g, '$1');
+  }
+  function mdText(src) {
+    var lines = String(src || '').replace(/\r/g, '').split('\n'), out = [], inFence = false;
+    function gap() { if (out.length && out[out.length - 1] !== '') out.push(''); }
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i], m;
+      if (/^\s*```/.test(l)) { inFence = !inFence; continue; }
+      if (inFence) { out.push(l); continue; }
+      if (isTableLine(l)) {
+        if (isSepLine(l)) continue;
+        var cells = l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return stripInline(c.trim()); });
+        out.push(cells.join('  |  ')); continue;
+      }
+      if ((m = /^#\s+(.*)$/.exec(l))) { gap(); out.push(stripInline(m[1]).toUpperCase()); continue; }
+      if ((m = /^#{2,4}\s+(.*)$/.exec(l))) { gap(); out.push(stripInline(m[1])); continue; }
+      if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(l)) { gap(); out.push('--------------------'); out.push(''); continue; }
+      if ((m = /^(\s*)[-*+•]\s+(.*)$/.exec(l))) { out.push(m[1] + '• ' + stripInline(m[2])); continue; }
+      out.push(stripInline(l));
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  if (typeof module !== 'undefined' && module.exports) module.exports = { md: md, esc: esc, mdText: mdText };
+  else { root.md = md; root.mdText = mdText; }
 })(typeof window !== 'undefined' ? window : this);

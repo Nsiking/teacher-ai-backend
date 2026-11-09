@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 14)
+# SmartClass Teacher AI - Backend + teacher app screens (version 17)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -76,6 +76,12 @@ Lesson notes and plans have a "Level of detail" choice (Simple, Standard, Detail
 "Check" on a lesson note, plan, scheme, question paper or worksheet: the AI re-does every calculation, checks every answer and
 lists real mistakes (where, what is wrong, the fix). "Make a corrected copy" saves a new item and keeps the original.
 Each check and each corrected copy counts as 1 generation.
+
+## Copy and Share give clean text
+Copy and Share turn the document into clean readable text (no #, **, |---| or code fences): headings in capitals, tables as
+simple rows, bullets as dots. Word and Print keep the full layout. Question papers now start with a tidy two-column
+Item | Details table. Claude 5.x models think before they write and the thinking counts against max_tokens, so every request
+has room to think (see src/ai.js); a blank answer is retried once with thinking off.
 
 ## My school formats
 Account > My school formats. A format is the layout a school uses for a scheme of work, lesson plan or lesson note:
