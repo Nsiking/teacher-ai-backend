@@ -16,6 +16,8 @@ const ADVICE = {
   network: 'This server could not reach Anthropic. Check Render status and your internet.',
   bad_request: 'Anthropic refused the request. If it keeps happening, send me the text shown as the last problem.',
   not_configured: 'No ANTHROPIC_API_KEY is set on the server. Add it in Render and save.',
+  refusal: 'The AI declined that request (its safety rules). It is about the wording or the subject of that one request, not an outage. Ask the teacher to change the wording; if you think it was wrong, send me the technical text.',
+  empty: 'The AI answered with nothing, twice in a row. The technical text shows why (stop_reason). If it keeps happening for one tool, tell me which tool and send me that text.',
   other: 'An unexpected problem. If it keeps happening, send me the text shown as the last problem.',
 };
 

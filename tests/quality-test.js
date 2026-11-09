@@ -30,6 +30,9 @@ const fake = http.createServer((req, res) => {
     if (mode === 'credits') return send(400, { error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.' } });
     if (mode === 'model') return send(404, { error: { type: 'not_found_error', message: 'model: claude-nope' } });
     if (mode === 'busy') return send(529, { error: { type: 'overloaded_error', message: 'Overloaded' } });
+    if (mode === 'empty') return send(200, { content: [], usage: { input_tokens: 500, output_tokens: 0 }, stop_reason: 'end_turn' });
+    if (mode === 'empty_once') { mode = 'ok'; return send(200, { content: [{ type: 'thinking', thinking: 'hmm' }], usage: { input_tokens: 500, output_tokens: 20 }, stop_reason: 'max_tokens' }); }
+    if (mode === 'refusal') return send(200, { content: [], usage: { input_tokens: 500, output_tokens: 0 }, stop_reason: 'refusal' });
     send(200, { content: [{ type: 'text', text: nextText }], usage: { input_tokens: 1500, output_tokens: 400 }, stop_reason: stop });
   });
 });
@@ -60,7 +63,7 @@ const NOTE = '# LESSON NOTE\n\n## Evaluation\n1. Find the LCM of 3 and 4. (12)\n
   check('too many requests (429)', k(429, { error: { type: 'rate_limit_error', message: 'rate limited' } }) === 'rate_limit');
   check('Anthropic busy (529 and 500)', k(529, {}) === 'overloaded' && k(500, {}) === 'overloaded');
   check('permission (403) and other refusals (400)', k(403, {}) === 'permission' && k(400, { error: { message: 'bad thing' } }) === 'bad_request');
-  check('every kind has advice in plain words', ['key_invalid', 'credits', 'model', 'permission', 'rate_limit', 'overloaded', 'timeout', 'network', 'bad_request', 'not_configured', 'other'].every((x) => H.ADVICE[x] && H.ADVICE[x].length > 30));
+  check('every kind has advice in plain words', ['key_invalid', 'credits', 'model', 'permission', 'rate_limit', 'overloaded', 'timeout', 'network', 'bad_request', 'not_configured', 'refusal', 'empty', 'other'].every((x) => H.ADVICE[x] && H.ADVICE[x].length > 30));
 
   await new Promise((r) => fake.listen(0, r));
   const FP = fake.address().port;
@@ -108,6 +111,23 @@ const NOTE = '# LESSON NOTE\n\n## Evaluation\n1. Find the LCM of 3 and 4. (12)\n
     const tq = calls.slice(n0);
     check('when all is well, both models answer, with tiny requests', r.body.results.every((x) => x.ok && x.reply === 'OK') && tq.length === 2 && tq[0].max_tokens === 20 && tq.map((x) => x.model).join() === 'claude-haiku-5-5,claude-sonnet-5-5', tq.map((x) => [x.model, x.max_tokens]));
     check('and the problem is cleared (the last good answer is newer than the last problem)', r.body.health.problemNow === false && r.body.health.consecutiveErrors === 0);
+
+    console.log('Blank answers from the AI');
+    nextText = NOTE;
+    mode = 'empty_once'; let c1 = calls.length; const ub = await used();
+    r = await A('POST', '/api/generate/lesson-note', { subject: 'Maths', className: 'Primary 6', topic: 'LCM' }, tok);
+    check('a blank answer is tried once more on its own, and then works (the teacher notices nothing)', r.status === 200 && calls.length === c1 + 2 && (await used()) === ub + 1, [r.status, calls.length - c1]);
+    mode = 'empty'; c1 = calls.length;
+    r = await A('POST', '/api/generate/lesson-note', { subject: 'Maths', className: 'Primary 6', topic: 'LCM' }, tok);
+    check('two blanks in a row: a clear message, and the generation is given back', r.status === 502 && /empty answer/.test(r.body.error) && calls.length === c1 + 2 && (await used()) === ub + 1, r.body);
+    r = await A('GET', '/api/admin/ai-health', null, null, true);
+    check('the admin sees why: kind "empty" with the stop reason and block types', r.body.lastError.kind === 'empty' && /stop_reason=end_turn, blocks=none, output_tokens=0/.test(r.body.lastError.text) && /twice in a row/.test(r.body.lastError.advice), r.body.lastError);
+    mode = 'refusal'; c1 = calls.length;
+    r = await A('POST', '/api/generate/lesson-note', { subject: 'Maths', className: 'Primary 6', topic: 'LCM' }, tok);
+    check('a refusal is not retried, and the teacher is asked to change the wording', r.status === 502 && r.body.code === 'AI_REFUSED' && /change the wording/.test(r.body.error) && calls.length === c1 + 1 && (await used()) === ub + 1, r.body);
+    r = await A('GET', '/api/admin/ai-health', null, null, true);
+    check('the admin sees it as a refusal, not an outage', r.body.lastError.kind === 'refusal' && /stop_reason=refusal/.test(r.body.lastError.text) && /not an outage/.test(r.body.lastError.advice), r.body.lastError);
+    mode = 'ok'; nextText = NOTE;
 
     console.log('No key / test mode');
     r = await C('GET', '/api/admin/ai-health', null, null, true);
