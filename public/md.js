@@ -13,7 +13,7 @@
   function isTableLine(l) { return /^\s*\|.*\|\s*$/.test(l); }
   function isSepLine(l) { return /^[\s|:\-]+$/.test(l) && l.indexOf('-') !== -1 && l.indexOf('|') !== -1; }
   function isSpecial(l) {
-    return /^\s*$/.test(l) || /^#{1,4}\s+/.test(l) || /^\s*(-{3,}|\*{3,})\s*$/.test(l) ||
+    return /^\s*$/.test(l) || /^\s*```/.test(l) || /^#{1,4}\s+/.test(l) || /^\s*(-{3,}|\*{3,})\s*$/.test(l) ||
       /^\s*[-*•]\s+/.test(l) || /^\s*\d+[.)]\s+/.test(l) || isTableLine(l);
   }
   function md(src) {
@@ -22,6 +22,12 @@
     while (i < lines.length) {
       var l = lines[i];
       if (/^\s*$/.test(l)) { i++; continue; }
+      if (/^\s*```/.test(l)) {
+        var code = []; i++;
+        while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { code.push(lines[i]); i++; }
+        i++;
+        out.push('<pre class="codeblock">' + esc(code.join('\n')) + '</pre>'); continue;
+      }
       if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) {
         var n = m[1].length; out.push('<h' + n + '>' + inline(m[2]) + '</h' + n + '>'); i++; continue;
       }

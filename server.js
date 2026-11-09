@@ -13,6 +13,7 @@ const prompts = require('./src/prompts');
 const backup = require('./src/backup');
 const textbooks = require('./src/textbooks');
 const formats = require('./src/formats');
+const aihealth = require('./src/aihealth');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const MAX_BODY = 300 * 1024;
@@ -312,6 +313,7 @@ add('DELETE', '/api/library/:id', { auth: true }, (ctx) => {
 require('./src/classroom').register(add);
 textbooks.register(add, { rateLimit, usageInfo });
 formats.register(add, { rateLimit, usageInfo });
+require('./src/quality').register(add, { rateLimit, usageInfo, isOpenable: (user, id) => { const open = openableIds(user); return !open || open.has(id); } });
 require('./src/timetable').register(add, { rateLimit });
 
 // ------------------------------------------------------------------ admin (needs ADMIN_KEY)
@@ -375,6 +377,23 @@ add('POST', '/api/admin/set-plan-bulk', { admin: true }, (ctx) => {
     catch (e) { return { identifier, ok: false, error: e.message }; }
   });
   return { ok: true, done: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
+});
+add('GET', '/api/admin/ai-health', { admin: true }, () => aihealth.snapshot());
+// A tiny real call to each model (costs a fraction of a cent) to prove the key, the credits and the model names work.
+add('POST', '/api/admin/ai-test', { admin: true }, async () => {
+  const snap = aihealth.snapshot();
+  const models = Array.from(new Set([snap.models.free, snap.models.paid]));
+  const results = [];
+  for (const model of models) {
+    const t0 = Date.now();
+    try {
+      const out = await ai.generate({ system: 'Reply with exactly one word.', user: 'Say OK.', maxTokens: 20, model, mockText: 'OK' });
+      results.push({ model, ok: true, ms: Date.now() - t0, reply: out.text.slice(0, 40), mock: out.model === 'mock' });
+    } catch (e) {
+      results.push({ model, ok: false, ms: Date.now() - t0, kind: e.aiKind || 'other', advice: aihealth.ADVICE[e.aiKind || 'other'] });
+    }
+  }
+  return { results, health: aihealth.snapshot() };
 });
 add('GET', '/api/admin/backup', { admin: true }, async (ctx) => backup.status(ctx.query.list === '1'));
 add('POST', '/api/admin/backup/run', { admin: true }, async () => {

@@ -334,6 +334,7 @@
         body += '<div class="row2 stack"><div><label for="f-week">Week (optional)</label><input id="f-week" maxlength="20" placeholder="e.g. Week 3"></div>' +
           '<div><label for="f-duration">Duration (minutes)</label><input id="f-duration" inputmode="numeric" value="40"></div></div>';
         if (kind === 'lesson-plan') body += '<label for="f-method">Teaching method (optional)</label><input id="f-method" maxlength="100" placeholder="e.g. group work, demonstration">';
+        body += '<label for="f-detail">Level of detail</label><select id="f-detail"><option value="simple">Simple (shorter)</option><option value="standard" selected>Standard</option><option value="detailed">Detailed (more examples)</option></select>';
       } else if (kind === 'questions') {
         body += '<div class="row2 stack"><div><label for="f-type">Type</label><select id="f-type"><option value="mixed">Objective + theory</option><option value="objective">Objective only</option><option value="theory">Theory only</option></select></div>' +
           '<div><label for="f-diff">Difficulty</label><select id="f-diff"><option value="mixed">Mixed</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>' +
@@ -612,6 +613,7 @@
     if (FORMAT_KINDS.indexOf(kind) > -1) b.formatId = Number(v('f-format')) || undefined;
     if (kind === 'lesson-note' || kind === 'lesson-plan') { b.term = v('f-term'); b.week = v('f-week'); b.duration = v('f-duration'); }
     if (kind === 'lesson-plan') b.method = v('f-method');
+    if (kind === 'lesson-note' || kind === 'lesson-plan') b.detail = v('f-detail');
     if (kind === 'questions') { b.type = v('f-type'); b.difficulty = v('f-diff'); if (b.type !== 'theory') b.objectiveCount = v('f-obj'); if (b.type !== 'objective') b.theoryCount = v('f-th'); }
     if (kind === 'worksheet') { b.activityCount = v('f-act'); }
     return b;
@@ -695,6 +697,18 @@
     }
     return '<div class="doc">' + window.md(it.content) + '</div>';
   }
+  var CHECKABLE = ['lesson_note', 'lesson_plan', 'scheme_of_work', 'questions', 'worksheet'], lastIssues = [];
+  function showCheck(r) {
+    lastIssues = r.issues || [];
+    if (!lastIssues.length) {
+      modal('<h3>✓ No mistakes found</h3><p class="sub">' + esc(r.summary || 'I re-did the calculations and checked the answers.') + '</p><p class="hint">An AI check can still miss things, so you decide what to use.</p><button class="btn" data-act="closemodal">Close</button>');
+      return;
+    }
+    modal('<h3>⚠ ' + lastIssues.length + ' thing' + (lastIssues.length === 1 ? '' : 's') + ' to look at</h3><div style="text-align:left">' +
+      (r.summary ? '<p class="sub">' + esc(r.summary) + '</p>' : '') +
+      lastIssues.map(function (i) { return '<div class="cmt"><div class="where">' + esc(i.where || 'In the document') + '</div><div>' + esc(i.problem) + '</div>' + (i.fix ? '<div class="hint" style="margin-top:4px"><b>Suggested:</b> ' + esc(i.fix) + '</div>' : '') + '</div>'; }).join('') +
+      '</div><button class="btn" data-act="fixitem">Make a corrected copy (uses 1 generation)</button><button class="btn alt" data-act="closemodal">Close</button><p class="hint">Your original stays as it is.</p>', true);
+  }
   function fmtWarning(id) {
     var c = null; try { c = JSON.parse(sessionStorage.getItem('tt_fmtcheck') || 'null'); } catch (e) { /* ignore */ }
     if (!c || c.id !== id) return '';
@@ -726,6 +740,7 @@
       (IS_NATIVE ? '' : '<button class="btn small alt" data-act="printitem">Print / PDF</button>') +
       '<button class="btn small alt" data-act="edititem">Edit</button>' +
       (it.kind === 'timetable' && it.meta ? '<button class="btn small alt" data-act="ttagain">Another arrangement</button>' : '') +
+      (CHECKABLE.indexOf(it.kind) > -1 ? '<button class="btn small alt" data-act="checkitem">✔ Check</button>' : '') +
       '<button class="btn small danger" data-act="deleteitem">Delete</button></div>' +
       '<div id="item-body">' + itemBodyHtml(it) + '</div>' +
       '<p class="hint no-print">Saved in your library. ' + fmtDate(it.createdAt) + (it.meta && it.meta.formatName ? ' · Format: ' + esc(it.meta.formatName) : '') + '</p>',
@@ -737,7 +752,7 @@
       var list = parseComments(it.content);
       if (list) return list.map(function (c) { return c.name + ': ' + c.comment; }).join('\n\n');
     }
-    return it.content;
+    return it.content.replace(/^\s*```[a-z]*\s*$/gmi, '');
   }
   // Saves a text file. In a browser it downloads; in the Android app it opens the share sheet
   // so the teacher can save to Drive, send on WhatsApp, open in Word, and so on.
@@ -762,7 +777,7 @@
     var land = it.kind === 'scheme_of_work' || it.kind === 'timetable';
     var doc = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>' + esc(it.title) +
       '</title><style>' + (land ? '@page WordSection1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:36pt}div.WordSection1{page:WordSection1}' : '') +
-      'body{font-family:Calibri,Arial,sans-serif;font-size:' + (land ? '10' : '12') + 'pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:4px;vertical-align:top}th{background:#eee}h1{text-align:center;font-size:16pt}h2{font-size:13pt}</style></head><body><div class="WordSection1">' + html + '</div></body></html>';
+      'body{font-family:Calibri,Arial,sans-serif;font-size:' + (land ? '10' : '12') + 'pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:4px;vertical-align:top}th{background:#eee}h1{text-align:center;font-size:16pt}h2{font-size:13pt}pre.codeblock{font-family:Consolas,Courier New,monospace;font-size:10pt;border:1px solid #444;padding:6px;white-space:pre}</style></head><body><div class="WordSection1">' + html + '</div></body></html>';
     saveFile((it.title.replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'teacher-ai') + '.doc', 'application/msword', '\ufeff' + doc);
   }
   function startEdit() {
@@ -938,6 +953,31 @@
     deleteitem: confirmDelete,
     dodelete: doDelete,
     closemodal: closeModal,
+    checkitem: async function () {
+      if (!currentItem) return;
+      if (!navigator.onLine) return toast('You are offline. Please connect to the internet.', true);
+      modal('<div class="spin"></div><h3>Checking…</h3><p class="sub">I am re-doing every calculation and answer. This uses 1 generation.</p>');
+      try {
+        var r = await api('POST', '/api/items/' + currentItem.id + '/check');
+        if (r.usage) { S.usage = r.usage; jset('tt_usage', r.usage); }
+        showCheck(r);
+      } catch (e) {
+        closeModal();
+        if (e.code === 'LIMIT_REACHED' || e.code === 'LIMIT_REACHED_MONTH') showLimit(e.message, e.code); else toast(e.message, true);
+      }
+    },
+    fixitem: async function () {
+      if (!currentItem || !lastIssues.length) return;
+      modal('<div class="spin"></div><h3>Making a corrected copy…</h3><p class="sub">This can take up to a minute. Your original stays as it is.</p>');
+      try {
+        var r = await api('POST', '/api/items/' + currentItem.id + '/fix', { issues: lastIssues });
+        if (r.usage) { S.usage = r.usage; jset('tt_usage', r.usage); }
+        closeModal(); toast('Corrected copy saved'); go('#/item/' + r.id);
+      } catch (e) {
+        closeModal();
+        if (e.code === 'LIMIT_REACHED' || e.code === 'LIMIT_REACHED_MONTH') showLimit(e.message, e.code); else toast(e.message, true);
+      }
+    },
     settheme: function (el) {
       var t = el.getAttribute('data-t');
       try { if (t === 'auto') localStorage.removeItem('tt_theme'); else localStorage.setItem('tt_theme', t); } catch (e) { /* ignore */ }

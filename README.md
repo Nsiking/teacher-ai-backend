@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 13)
+# SmartClass Teacher AI - Backend + teacher app screens (version 14)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -64,6 +64,18 @@ library, no footer. Every number can be changed with a setting in Render (see .e
 A teacher who goes back to Free keeps all classes and pupils. Only adding more is blocked.
 Activate a plan on /admin (Give a user a paid plan). School licences: /admin > "School licence" gives many teachers
 a plan at once. A 7-day trial = give the plan for 7 days.
+
+## AI health, quality checks and detail
+Admin page > AI health: shows if the AI is working, which key is in use (last 4 characters only), which models, the last good
+answer, and the last problem in plain words (wrong key, credits finished, wrong model name, busy...) with what to do.
+"Test the AI now" makes one tiny real request to each model (a fraction of a cent). Test it:  node tests/quality-test.js
+Every request tells the AI to check every calculation and answer and show working one step per line; diagrams are drawn in
+text blocks, which now display as boxed fixed-width blocks on screen, in Copy, Word and Print.
+Lesson notes and plans have a "Level of detail" choice (Simple, Standard, Detailed) and the AI is told to teach only
+"Part 1 of 2" when a topic is too big for the lesson time.
+"Check" on a lesson note, plan, scheme, question paper or worksheet: the AI re-does every calculation, checks every answer and
+lists real mistakes (where, what is wrong, the fix). "Make a corrected copy" saves a new item and keeps the original.
+Each check and each corrected copy counts as 1 generation.
 
 ## My school formats
 Account > My school formats. A format is the layout a school uses for a scheme of work, lesson plan or lesson note:

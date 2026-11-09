@@ -1,5 +1,6 @@
 'use strict';
 const { HttpError } = require('./util');
+const health = require('./aihealth');
 
 const API_URL = process.env.AI_API_URL || 'https://api.anthropic.com/v1/messages';
 
@@ -9,7 +10,10 @@ async function generate({ system, user, maxTokens, model, mockText, images }) {
     return { text: mockText || '[TEST MODE] Fake AI answer.', inputTokens: 0, outputTokens: 0, model: 'mock', truncated: false };
   }
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new HttpError(503, 'The AI service is not set up yet. Please try again later.', 'AI_NOT_CONFIGURED');
+  if (!key) {
+    health.recordError('not_configured', null, 'ANTHROPIC_API_KEY is not set', model);
+    throw Object.assign(new HttpError(503, 'The AI service is not set up yet. Please try again later.', 'AI_NOT_CONFIGURED'), { aiKind: 'not_configured' });
+  }
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 150000);
@@ -37,7 +41,9 @@ async function generate({ system, user, maxTokens, model, mockText, images }) {
     });
   } catch (e) {
     console.error('AI request failed:', e && e.name);
-    throw new HttpError(504, 'The AI took too long to answer. Please try again.', 'AI_TIMEOUT');
+    const kind = e && e.name === 'AbortError' ? 'timeout' : 'network';
+    health.recordError(kind, null, e && e.name, model);
+    throw Object.assign(new HttpError(504, 'The AI took too long to answer. Please try again.', 'AI_TIMEOUT'), { aiKind: kind });
   } finally {
     clearTimeout(timer);
   }
@@ -47,11 +53,17 @@ async function generate({ system, user, maxTokens, model, mockText, images }) {
 
   if (!r.ok) {
     console.error('AI error status', r.status, data && data.error && data.error.type);
+    const info = health.classify(r.status, data);
+    health.recordError(info.kind, info.status, info.text, model);
     const busy = r.status === 429 || r.status >= 500 || r.status === 529;
-    throw new HttpError(busy ? 503 : 502, 'The AI service is busy. Please try again in a moment.', 'AI_ERROR');
+    throw Object.assign(new HttpError(busy ? 503 : 502, 'The AI service is busy. Please try again in a moment.', 'AI_ERROR'), { aiKind: info.kind });
   }
   const text = ((data && data.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
-  if (!text) throw new HttpError(502, 'The AI returned an empty answer. Please try again.', 'AI_EMPTY');
+  if (!text) {
+    health.recordError('other', r.status, 'The AI returned an empty answer', model);
+    throw Object.assign(new HttpError(502, 'The AI returned an empty answer. Please try again.', 'AI_EMPTY'), { aiKind: 'other' });
+  }
+  health.recordOk(model);
 
   return {
     text,

@@ -115,6 +115,7 @@ function applyTo(out, ctx) {
     if (hasCol(spec, /time|duration|minute/i)) rules.push(`In any table with a Time column, the times must add up to exactly ${ctx.duration || 40} minutes and be written as numbers of minutes, for example "5 mins".`);
     if (tbs.length) rules.push('Cite a textbook with its tag ([BOOK1], [BOOK2] or [BOOK3]) in the section for references, materials or sources. If the format has no such section, put the tags in the header table or the section that fits best. Where the contents list shows this topic, give the chapter and pages exactly as given.');
   }
+  (out.rules || []).forEach((r) => rules.push(r));
   rules.push('In a table cell keep the text short, never use a line break, and never use the | character.');
   const header = spec.header.length ? 'Right after the title, a two-column table (Item | Details) with exactly these rows, in this order: ' + spec.header.join(', ') + '. Fill each row from the teacher\'s details; if a detail was not given, leave it as ........\n\n' : '';
   const prompt = intro + ' Use the teacher\'s own school format below INSTEAD of the standard layout. Follow it exactly: the same headings in the same order, the same table columns, the same header rows. Do not add sections that are not listed and do not leave any out. Write every section heading exactly as given, on its own line starting with ##.\n\n' +

@@ -35,6 +35,13 @@
   </div>
   <div class="card"><h2>Stats</h2><div id="stats">Not loaded yet.</div></div>
   <div class="card">
+    <h2>AI health</h2>
+    <div id="aiStatus" style="font-size:.92rem">Not loaded yet.</div>
+    <button id="btnAiTest">Test the AI now</button>
+    <p style="color:var(--mute);font-size:.82rem;margin:6px 0 0">The test makes one tiny real request to each model (a fraction of a cent) to prove the key, the credits and the model names work.</p>
+    <div id="aiTest" style="font-size:.88rem;margin-top:8px"></div>
+  </div>
+  <div class="card">
     <h2>Database backups</h2>
     <div id="bkStatus" style="font-size:.92rem">Not loaded yet.</div>
     <button id="btnBkRun">Back up now</button>
@@ -148,7 +155,33 @@ async function loadBackup(withList) {
 }
 $('btnBkList').onclick = async () => { try { await loadBackup(true); } catch (e) { msg(e.message, true); } };
 $('btnBkRun').onclick = async () => { msg('Backing up... this can take a few seconds.'); try { const r = await api('POST', '/api/admin/backup/run'); msg('Backup saved: ' + r.key); await loadBackup(true); } catch (e) { msg(e.message, true); try { await loadBackup(false); } catch (x) {} } };
-$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); await loadBackup(false); await loadCatalogue(); msg(''); } catch (e) { msg(e.message, true); } };
+function ago(ms) {
+  if (!ms) return 'never';
+  const m = Math.round((Date.now() - ms) / 60000);
+  return (m < 1 ? 'just now' : m < 60 ? m + ' minutes ago' : m < 1440 ? Math.round(m / 60) + ' hours ago' : Math.round(m / 1440) + ' days ago') + ' (' + new Date(ms).toLocaleString() + ')';
+}
+async function loadAi() {
+  const h = await api('GET', '/api/admin/ai-health');
+  let status;
+  if (h.mode === 'TEST') status = '<b style="color:var(--err)">TEST MODE.</b> Teachers get fake answers. Set AI_MOCK to 0 in Render to use the real AI.';
+  else if (h.mode === 'NO KEY') status = '<b style="color:var(--err)">NO KEY.</b> Add ANTHROPIC_API_KEY in Render.';
+  else if (h.problemNow) status = '<b style="color:var(--err)">PROBLEM.</b> The last request failed.';
+  else status = '<b style="color:var(--ok,#15803d)">Working.</b>';
+  let html = status + '<br>Key ends with: <b>' + esc(h.keyEnds ? '…' + h.keyEnds : 'none') + '</b> &middot; Free model: <b>' + esc(h.models.free) + '</b> &middot; Paid model: <b>' + esc(h.models.paid) + '</b>';
+  html += '<br>Last good answer: <b>' + esc(ago(h.lastOkAt)) + '</b>' + (h.lastOkModel ? ' (' + esc(h.lastOkModel) + ')' : '');
+  if (h.lastError) html += '<br><span style="color:' + (h.problemNow ? 'var(--err)' : 'var(--mute)') + '">Last problem: <b>' + esc(ago(h.lastError.at)) + '</b><br>' + esc(h.lastError.advice) + '<br><small>Technical: ' + esc(h.lastError.kind) + (h.lastError.status ? ' (' + h.lastError.status + ')' : '') + (h.lastError.text ? ' - ' + esc(h.lastError.text) : '') + '</small></span>';
+  if (h.days.length) html += '<br><small>Last days (good / failed): ' + h.days.map((d) => esc(d.day.slice(5)) + ': ' + d.ok + ' / ' + d.err).join(' &middot; ') + '</small>';
+  $('aiStatus').innerHTML = html;
+}
+$('btnAiTest').onclick = async () => {
+  $('aiTest').textContent = 'Testing…';
+  try {
+    const r = await api('POST', '/api/admin/ai-test');
+    $('aiTest').innerHTML = r.results.map((x) => x.ok ? '<span style="color:var(--ok,#15803d)">&#10003; ' + esc(x.model) + ': answered in ' + x.ms + ' ms' + (x.mock ? ' (test mode, no real call)' : '') + '</span>' : '<span style="color:var(--err)">&#10007; ' + esc(x.model) + ': ' + esc(x.advice) + '</span>').join('<br>');
+    await loadAi();
+  } catch (e) { $('aiTest').textContent = ''; msg(e.message, true); }
+};
+$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); await loadBackup(false); await loadCatalogue(); await loadAi(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnUsers').onclick = async () => { try { await loadUsers(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnPlan').onclick = async () => { try { const r = await api('POST', '/api/admin/set-plan', { identifier: $('pIdent').value, plan: $('pPlan').value, days: Number($('pDays').value) }); msg('Saved: ' + r.user.name + ' is now on the ' + r.user.plan + ' plan' + (r.user.planExpiresAt ? ' until ' + new Date(r.user.planExpiresAt).toLocaleDateString() : '') + '.'); await loadUsers(); } catch (e) { msg(e.message, true); } };
 $('btnDel').onclick = async () => { try { if ($('xOk').value.trim() !== 'DELETE') throw new Error('Type DELETE in the box to confirm.'); await api('POST', '/api/admin/delete-user', { identifier: $('xIdent').value }); msg('Account deleted.'); $('xIdent').value = ''; $('xOk').value = ''; await loadUsers(); } catch (e) { msg(e.message, true); } };
