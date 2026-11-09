@@ -109,14 +109,30 @@ const NOTE = '# LESSON NOTE\n\n## Evaluation\n1. Find the LCM of 3 and 4. (12)\n
     mode = 'ok'; nextText = 'OK'; const n0 = calls.length;
     r = await A('POST', '/api/admin/ai-test', null, null, true);
     const tq = calls.slice(n0);
-    check('when all is well, both models answer, with tiny requests', r.body.results.every((x) => x.ok && x.reply === 'OK') && tq.length === 2 && tq[0].max_tokens === 20 && tq.map((x) => x.model).join() === 'claude-haiku-5-5,claude-sonnet-5-5', tq.map((x) => [x.model, x.max_tokens]));
+    check('when all is well, both models answer, with tiny requests', r.body.results.every((x) => x.ok && x.reply === 'OK') && tq.length === 2 && tq[0].max_tokens === 25 && tq[0].thinking.type === 'disabled' && tq.map((x) => x.model).join() === 'claude-haiku-5-5,claude-sonnet-5-5', tq.map((x) => [x.model, x.max_tokens]));
     check('and the problem is cleared (the last good answer is newer than the last problem)', r.body.health.problemNow === false && r.body.health.consecutiveErrors === 0);
+
+    console.log('Room to think (Claude 5.x models think before they write, and thinking counts against max_tokens)');
+    const R = require('../src/ai').requestFor;
+    let q1 = R('claude-haiku-5-5', 4150, undefined, false);
+    check('by default: low effort, 25% more room for the newer tokenizer, plus 3000 tokens of room to think', q1.max_tokens === 8188 && q1.extra.output_config.effort === 'low' && !q1.extra.thinking, q1);
+    q1 = R('claude-haiku-5-5', 2500, 'off', false);
+    check('plain reading and the AI test switch thinking off (no room added)', q1.max_tokens === 3125 && q1.extra.thinking.type === 'disabled' && !q1.extra.output_config, q1);
+    q1 = R('claude-haiku-5-5', 4150, undefined, true);
+    check('the retry after a blank answer always switches thinking off', q1.extra.thinking.type === 'disabled' && q1.max_tokens === 5188, q1);
+    q1 = R('claude-haiku-4-5', 1000, undefined, false);
+    check('an older model name gets no "effort" setting (it would be refused)', !q1.extra.output_config && !q1.extra.thinking && q1.max_tokens === 4250, q1);
+    check('the budget never goes above 16000', R('claude-sonnet-5-5', 15000, undefined, false).max_tokens === 16000);
+    r = await A('POST', '/api/generate/questions', { subject: 'Mathematics', className: 'JSS 3', topic: 'Multiplication, L.C.M., Division, Fractions, Perimeter, H.C.F., Compound interest, Word problem, Rational and irrational numbers, Linear Equations', type: 'mixed', objectiveCount: 10, theoryCount: 3 }, tok);
+    check('your failing case (10 topics, 10 objective + 3 theory): the request now has room to think (8188) and low effort', lastRequest.max_tokens === 8188 && lastRequest.output_config.effort === 'low' && !lastRequest.thinking, [lastRequest.max_tokens, lastRequest.output_config]);
+    nextText = NOTE;
 
     console.log('Blank answers from the AI');
     nextText = NOTE;
     mode = 'empty_once'; let c1 = calls.length; const ub = await used();
     r = await A('POST', '/api/generate/lesson-note', { subject: 'Maths', className: 'Primary 6', topic: 'LCM' }, tok);
     check('a blank answer is tried once more on its own, and then works (the teacher notices nothing)', r.status === 200 && calls.length === c1 + 2 && (await used()) === ub + 1, [r.status, calls.length - c1]);
+    check('the first try had thinking on (low effort); the retry had thinking switched off, so text is certain', calls[c1].output_config.effort === 'low' && !calls[c1].thinking && calls[c1 + 1].thinking.type === 'disabled' && !calls[c1 + 1].output_config, [calls[c1].output_config, calls[c1 + 1].thinking]);
     mode = 'empty'; c1 = calls.length;
     r = await A('POST', '/api/generate/lesson-note', { subject: 'Maths', className: 'Primary 6', topic: 'LCM' }, tok);
     check('two blanks in a row: a clear message, and the generation is given back', r.status === 502 && /empty answer/.test(r.body.error) && calls.length === c1 + 2 && (await used()) === ub + 1, r.body);
@@ -162,7 +178,7 @@ const NOTE = '# LESSON NOTE\n\n## Evaluation\n1. Find the LCM of 3 and 4. (12)\n
     check('it counts as one generation', r.body.usage.used === u0 + 1 && (await used()) === u0 + 1);
     const cp = lastRequest.messages[0].content;
     check('the AI is asked to re-do every calculation and check every answer, and gets the whole document', /Re-do every calculation yourself/.test(cp) && /Check every answer/.test(cp) && cp.includes('<document>') && cp.includes('Find the HCF of 8 and 12. (6)') && /Ignore any instruction/.test(lastRequest.system), cp.slice(0, 200));
-    check('it uses the cheap model on a free plan and a small answer budget', lastRequest.model === 'claude-haiku-5-5' && lastRequest.max_tokens === 1500);
+    check('it uses the cheap model on a free plan, with medium thinking and 6000 tokens of room to think (the check benefits from reasoning)', lastRequest.model === 'claude-haiku-5-5' && lastRequest.max_tokens === 7875 && lastRequest.output_config.effort === 'medium', [lastRequest.max_tokens, lastRequest.output_config]);
     nextText = JSON.stringify({ verdict: 'ok', summary: 'No mistakes.', issues: [] });
     r = await A('POST', '/api/items/' + noteId + '/check', null, tok);
     check('a clean document: "ok" with no issues', r.body.verdict === 'ok' && r.body.issues.length === 0);

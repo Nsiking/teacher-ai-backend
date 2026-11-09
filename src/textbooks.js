@@ -191,7 +191,7 @@ function register(add, helpers) {
     let out;
     try {
       out = await ai.generate({
-        system: READ_SYSTEM, user: readPrompt(title), images, maxTokens: 2500, model: plans.modelFor(plan),
+        system: READ_SYSTEM, user: readPrompt(title), images, maxTokens: 2500, model: plans.modelFor(plan), think: 'off',
         mockText: 'Chapter 1 | Sample chapter one (TEST MODE) | pp. 1-12\nChapter 2 | Sample chapter two (TEST MODE) | pp. 13-30',
       });
     } catch (e) { plans.refund(user.id); throw e; }

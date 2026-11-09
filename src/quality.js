@@ -63,7 +63,7 @@ function register(add, helpers) {
     let out;
     try {
       out = await ai.generate({
-        system: CHECK_SYSTEM, user: checkPrompt(item.kind, item.content), maxTokens: 1500, model: plans.modelFor(plan),
+        system: CHECK_SYSTEM, user: checkPrompt(item.kind, item.content), maxTokens: 1500, model: plans.modelFor(plan), think: { effort: 'medium', headroom: 6000 },
         mockText: JSON.stringify({ verdict: 'problems', summary: '[TEST MODE] I found one thing to look at.', issues: [{ where: 'Evaluation, question 2', problem: '[TEST MODE] Sample problem found.', fix: '[TEST MODE] Sample correction.' }] }),
       });
     } catch (e) { plans.refund(user.id); throw e; }
@@ -81,7 +81,7 @@ function register(add, helpers) {
     let out;
     try {
       out = await ai.generate({
-        system: FIX_SYSTEM, user: fixPrompt(item.kind, item.content, issues), maxTokens: item.kind === 'scheme_of_work' ? 8000 : 6500, model: plans.modelFor(plan),
+        system: FIX_SYSTEM, user: fixPrompt(item.kind, item.content, issues), maxTokens: item.kind === 'scheme_of_work' ? 8000 : 6500, model: plans.modelFor(plan), think: { effort: 'low', headroom: 2000 },
         mockText: item.content + '\n\n[TEST MODE] This is the corrected copy.',
       });
     } catch (e) { plans.refund(user.id); throw e; }

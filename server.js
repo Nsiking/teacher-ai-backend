@@ -387,7 +387,7 @@ add('POST', '/api/admin/ai-test', { admin: true }, async () => {
   for (const model of models) {
     const t0 = Date.now();
     try {
-      const out = await ai.generate({ system: 'Reply with exactly one word.', user: 'Say OK.', maxTokens: 20, model, mockText: 'OK' });
+      const out = await ai.generate({ system: 'Reply with exactly one word.', user: 'Say OK.', maxTokens: 20, model, mockText: 'OK', think: 'off' });
       results.push({ model, ok: true, ms: Date.now() - t0, reply: out.text.slice(0, 40), mock: out.model === 'mock' });
     } catch (e) {
       results.push({ model, ok: false, ms: Date.now() - t0, kind: e.aiKind || 'other', advice: aihealth.ADVICE[e.aiKind || 'other'] });

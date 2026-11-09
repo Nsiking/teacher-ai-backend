@@ -6,8 +6,23 @@ const API_URL = process.env.AI_API_URL || 'https://api.anthropic.com/v1/messages
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// The newer models (5.x) think before they write, and the thinking counts against max_tokens. So each request gets
+// room to think, and a choice of how much: think = 'off' (plain extraction), or { effort: 'low'|'medium', headroom: tokens }.
+const NEW_MODEL = /claude-(haiku|sonnet|opus|fable|mythos)-5/;
+const DEFAULT_THINK = { effort: 'low', headroom: 3000 };
+function requestFor(model, maxTokens, think, forceOff) {
+  const off = forceOff || think === 'off';
+  const t = off ? null : Object.assign({}, DEFAULT_THINK, think || {});
+  // about 30% more tokens per text than older models, so the answer budget is raised
+  const budget = Math.min(16000, Math.ceil(maxTokens * 1.25) + (off ? 0 : t.headroom));
+  const extra = {};
+  if (off) extra.thinking = { type: 'disabled' };
+  else if (NEW_MODEL.test(model)) extra.output_config = { effort: t.effort };
+  return { max_tokens: budget, extra };
+}
+
 // Returns { text, inputTokens, outputTokens, model, truncated }
-async function generate({ system, user, maxTokens, model, mockText, images }) {
+async function generate({ system, user, maxTokens, model, mockText, images, think }) {
   if (process.env.AI_MOCK === '1') {
     return { text: mockText || '[TEST MODE] Fake AI answer.', inputTokens: 0, outputTokens: 0, model: 'mock', truncated: false };
   }
@@ -16,20 +31,14 @@ async function generate({ system, user, maxTokens, model, mockText, images }) {
     health.recordError('not_configured', null, 'ANTHROPIC_API_KEY is not set', model);
     throw Object.assign(new HttpError(503, 'The AI service is not set up yet. Please try again later.', 'AI_NOT_CONFIGURED'), { aiKind: 'not_configured' });
   }
-  const body = JSON.stringify({
-    model,
-    max_tokens: maxTokens,
-    system,
-    messages: [{
-      role: 'user',
-      content: images && images.length
-        ? images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })).concat([{ type: 'text', text: user }])
-        : user,
-    }],
-  });
+  const content = images && images.length
+    ? images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })).concat([{ type: 'text', text: user }])
+    : user;
 
-  // A blank answer is tried once more on its own. Real errors are not retried.
+  // A blank answer is tried once more on its own, this time with thinking switched off so that text is certain. Real errors are not retried.
   for (let attempt = 0; attempt < 2; attempt++) {
+    const rq = requestFor(model, maxTokens, think, attempt > 0);
+    const body = JSON.stringify(Object.assign({ model, max_tokens: rq.max_tokens, system, messages: [{ role: 'user', content }] }, rq.extra));
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 150000);
     let r;
@@ -72,7 +81,7 @@ async function generate({ system, user, maxTokens, model, mockText, images }) {
       };
     }
     const stopReason = (data && data.stop_reason) || 'none';
-    const diag = 'stop_reason=' + stopReason + ', blocks=' + (blocks.map((b) => b.type).join(',') || 'none') + ', output_tokens=' + ((data && data.usage && data.usage.output_tokens) || 0) + (images && images.length ? ', with_photos=' + images.length : '');
+    const diag = (attempt > 0 ? 'retry without thinking: ' : '') + 'stop_reason=' + stopReason + ', blocks=' + (blocks.map((b) => b.type).join(',') || 'none') + ', output_tokens=' + ((data && data.usage && data.usage.output_tokens) || 0) + (images && images.length ? ', with_photos=' + images.length : '');
     console.error('AI empty answer:', diag);
     if (stopReason === 'refusal') {
       health.recordError('refusal', 200, 'The AI declined this request (' + diag + ')', model);
@@ -84,4 +93,4 @@ async function generate({ system, user, maxTokens, model, mockText, images }) {
   }
 }
 
-module.exports = { generate };
+module.exports = { generate, requestFor };

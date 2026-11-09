@@ -281,7 +281,7 @@ function register(add, helpers) {
     let out;
     try {
       out = await ai.generate({
-        system: LEARN_SYSTEM, user: learnPrompt(type, sampleText.trim()), images, maxTokens: 2500, model: plans.modelFor(plan),
+        system: LEARN_SYSTEM, user: learnPrompt(type, sampleText.trim()), images, maxTokens: 2500, model: plans.modelFor(plan), think: 'off',
         mockText: JSON.stringify({ title: TYPE_LABEL[type].toUpperCase() + ' (TEST MODE)', header: ['School', 'Subject', 'Class', 'Topic', 'Date'], sections: [{ heading: 'Objectives', kind: 'numbered', instructions: 'Sample objectives' }, { heading: 'Procedure', kind: 'table', columns: ['Step', 'Teacher', 'Learners', 'Time'], instructions: 'Sample steps' }, { heading: 'Evaluation', kind: 'text', instructions: 'Sample' }], notes: '' }),
       });
     } catch (e) { plans.refund(user.id); throw e; }
