@@ -8,6 +8,7 @@ const { db } = require('./db');
 const { HttpError } = require('./util');
 const auth = require('./auth');
 const messenger = require('./messenger');
+const recovery = require('./recoveryemail');
 
 const MINUTES = 15;
 const MAX_TRIES = 5;
@@ -25,11 +26,18 @@ function register(add, helpers) {
     const isEmail = idRaw.includes('@');
     if (isEmail) auth.normEmail(idRaw); else auth.normPhone(idRaw);   // only checks the shape, never whether it exists
     helpers.rateLimit('reset:' + idRaw.toLowerCase().replace(/\s+/g, ''), 5, 60 * 60 * 1000);
-    const channel = isEmail ? 'email' : 'sms';
-    const res = { ok: true, channel, available: !!messenger.channels()[channel], minutes: MINUTES };
+    const ch = messenger.channels();
+    const identKind = isEmail ? 'email' : 'sms';
+    // A phone number can be served by SMS or by the confirmed recovery email on the account.
+    const res = { ok: true, channel: identKind, available: isEmail ? ch.email : (ch.sms || ch.email), minutes: MINUTES, channels: ch };
     if (!res.available) return res;
     const user = auth.findByIdentifier(idRaw);
     if (!user) return res;                                            // same answer; nothing is sent
+    let channel = identKind;
+    if (!isEmail) {
+      if (ch.email && recovery.isVerified(user)) channel = 'email';   // free, quick, and the address is known to be the teacher's
+      else if (!ch.sms) return res;                                   // nothing usable for this account
+    }
 
     const now = Date.now(), today = dayKey();
     const row = db.prepare('SELECT * FROM reset_codes WHERE user_id = ?').get(user.id);
@@ -65,16 +73,18 @@ function register(add, helpers) {
     if (!user) throw bad();
     const row = db.prepare('SELECT * FROM reset_codes WHERE user_id = ?').get(user.id);
     if (!row) throw bad();
-    if (row.expires_at < Date.now()) { db.prepare('DELETE FROM reset_codes WHERE user_id = ?').run(user.id); throw bad(); }
+    if (row.expires_at < Date.now()) throw bad();
     const given = Buffer.from(auth.codeHash(user.id, /^\d{6}$/.test(code) ? code : 'x')), want = Buffer.from(row.code_hash);
     if (given.length !== want.length || !crypto.timingSafeEqual(given, want) || !/^\d{6}$/.test(code)) {
-      if (row.attempts + 1 >= MAX_TRIES) db.prepare('DELETE FROM reset_codes WHERE user_id = ?').run(user.id);
+      // after too many tries the code is cancelled, but the record stays so the one-a-minute and five-a-day limits keep counting
+      if (row.attempts + 1 >= MAX_TRIES) db.prepare("UPDATE reset_codes SET code_hash = 'x', expires_at = 0, attempts = 0 WHERE user_id = ?").run(user.id);
       else db.prepare('UPDATE reset_codes SET attempts = attempts + 1 WHERE user_id = ?').run(user.id);
       throw bad();
     }
     const pw = auth.checkPasswordRule(ctx.body.newPassword);          // only checked once the code is right
     db.prepare('UPDATE users SET pass_hash = ?, token_version = token_version + 1 WHERE id = ?').run(auth.hashPassword(pw), user.id);
     db.prepare('DELETE FROM reset_codes WHERE user_id = ?').run(user.id);
+    if (row.channel === 'email' && user.email) recovery.markVerified(user.id, user.email);   // reading the code proves the mailbox is theirs
     return helpers.sessionPayload(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id));
   });
 

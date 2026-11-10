@@ -8,7 +8,7 @@
 
   function esc(s) { return T.esc(s); }
   function $(s) { return document.querySelector(s); }
-  var st = { id: '', channel: '', step: 1 };
+  var st = { id: '', channel: '', step: 1, channels: { email: false, sms: false } };
   var timer = null;
 
   function mask(id) {
@@ -36,9 +36,16 @@
       '<div class="toggle"><button class="link" data-go="auth">Back to log in</button></div></div>' +
       '<p class="hint" style="text-align:center">Cannot get the code? ' + helpLink() + ' and we will reset it for you.</p>', {});
   }
+  function sentLine() {
+    var m = '<b>' + esc(mask(st.id)) + '</b>';
+    if (st.id.indexOf('@') > -1) return 'If there is an account for ' + m + ', we have sent a 6-digit code to it. It works for 15 minutes.';
+    if (st.channels.sms && st.channels.email) return 'If there is an account for ' + m + ', we have sent a 6-digit code by SMS, or to the recovery email saved on it. It works for 15 minutes.';
+    if (st.channels.email) return 'If the account for ' + m + ' has a confirmed recovery email, we have sent a 6-digit code to that email. It works for 15 minutes. If you never added a recovery email, we cannot send a code, so please message us on WhatsApp below.';
+    return 'If there is an account for ' + m + ', we have sent a 6-digit code by SMS. It works for 15 minutes.';
+  }
   function step2() {
-    var email = st.id.indexOf('@') > -1;
-    T.shell(hero('Enter your code', 'If there is an account for <b>' + esc(mask(st.id)) + '</b>, we have sent a 6-digit code to it. It works for 15 minutes.') +
+    var email = st.id.indexOf('@') > -1 || st.channels.email;
+    T.shell(hero('Enter your code', sentLine()) +
       '<div class="card"><label for="fg-code" style="margin-top:0">6-digit code</label><input id="fg-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px;font-size:1.3rem;text-align:center">' +
       '<label for="fg-pw">New password (at least 8 characters)</label>' + T.pwInput('fg-pw', 'new-password', ' maxlength="100"') + '' +
       '<div class="err" id="fg-err"></div>' +
@@ -70,7 +77,7 @@
     var label = btn.textContent; btn.textContent = 'Please wait…';
     try {
       var r = await T.api('POST', '/api/auth/reset/request', { identifier: id });
-      st.id = id; st.channel = r.channel;
+      st.id = id; st.channel = r.channel; st.channels = r.channels || { email: false, sms: false };
       if (!r.available) {
         if (note) note.innerHTML = (r.channel === 'email' ? 'Codes by email are not available yet.' : 'Codes by SMS are not available yet.') + ' ' + helpLink() + ' and we will reset your password for you.';
         btn.disabled = false; btn.textContent = label; return;
@@ -94,7 +101,7 @@
     btn.disabled = true; btn.textContent = 'Please wait…';
     try {
       var s = await T.api('POST', '/api/auth/reset/confirm', { identifier: st.id, code: code, newPassword: pw });
-      clearInterval(timer); st = { id: '', channel: '', step: 1 };
+      clearInterval(timer); st = { id: '', channel: '', step: 1, channels: { email: false, sms: false } };
       T.saveSession(s); T.toast('Password changed. You are logged in.'); T.go('#/home');
     } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Change my password'; }
   };

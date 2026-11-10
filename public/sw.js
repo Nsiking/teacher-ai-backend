@@ -1,6 +1,6 @@
 'use strict';
 // Keeps the app screens available offline. Saved lesson notes are kept by the app itself.
-const CACHE = 'teacher-ai-shell-v10';
+const CACHE = 'teacher-ai-shell-v11';
 const SHELL = ['/', '/app.css', '/app.js', '/md.js', '/classes.js', '/timetable.js', '/formats.js', '/packs.js', '/reset.js', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {

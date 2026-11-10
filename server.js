@@ -16,6 +16,7 @@ const formats = require('./src/formats');
 const aihealth = require('./src/aihealth');
 const packs = require('./src/packs');
 const passwordReset = require('./src/passwordreset');
+const recoveryEmail = require('./src/recoveryemail');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const MAX_BODY = 300 * 1024;
@@ -105,7 +106,7 @@ function requireAdmin(req) {
 function publicUser(u) {
   const plan = plans.effective(u);
   return {
-    id: u.id, name: u.name, email: u.email, phone: u.phone,
+    id: u.id, name: u.name, email: u.email, phone: u.phone, emailVerified: recoveryEmail.isVerified(u),
     plan, planExpiresAt: plans.isPaid(plan) ? u.plan_expires_at : null, createdAt: u.created_at,
   };
 }
@@ -131,7 +132,7 @@ function deleteUserData(id) {
   db.prepare('DELETE FROM items WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM usage WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM gen_log WHERE user_id = ?').run(id);
-  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes', 'timetable_slots', 'formats', 'packs', 'reset_codes']) {
+  for (const t of ['scores', 'attendance', 'assessments', 'pupils', 'classes', 'timetable_slots', 'formats', 'packs', 'reset_codes', 'email_codes', 'email_verified']) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id);
   }
   db.prepare('DELETE FROM textbooks WHERE owner_user_id = ?').run(id);
@@ -319,6 +320,7 @@ textbooks.register(add, { rateLimit, usageInfo });
 formats.register(add, { rateLimit, usageInfo });
 packs.register(add, { rateLimit, usageInfo });
 passwordReset.register(add, { rateLimit, sessionPayload });
+recoveryEmail.register(add, { rateLimit, publicUser });
 require('./src/quality').register(add, { rateLimit, usageInfo, isOpenable: (user, id) => { const open = openableIds(user); return !open || open.has(id); } });
 require('./src/timetable').register(add, { rateLimit });
 

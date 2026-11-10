@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 19)
+# SmartClass Teacher AI - Backend + teacher app screens (version 21)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -87,6 +87,15 @@ Settings (Render > Environment): EMAIL_PROVIDER (brevo or resend), EMAIL_API_KEY
 <no-reply@yourdomain>", a verified sender); SMS_PROVIDER=termii, TERMII_API_KEY, TERMII_SENDER_ID, TERMII_CHANNEL (dnd for
 transactional), SMS_DAILY_CAP (default 300 a day, a safety limit on SMS spending). The admin page has a "Password reset
 messages" card with plain-words problems and a "Send a test message" button. Test it:  node tests/reset-test.js
+
+## Recovery email
+Sign-up has an optional Email box (for phone sign-ups). Account > Recovery email: a teacher adds or changes an email (the password is
+needed), receives a 6-digit code at it, and enters it; the email is then confirmed and can log in and reset the password. A
+forgotten-password request typed with a PHONE NUMBER goes to the confirmed email first (free), otherwise by SMS if SMS is set up;
+an unconfirmed email is never used for a phone request. Reading a reset code from an email proves the mailbox, so it becomes
+confirmed. The old address is told when the email is changed. Home shows a reminder until the email is confirmed (hidden for 2
+weeks per account when dismissed). A cancelled code (too many tries, expired, address taken) keeps the one-a-minute and
+five-a-day limits counting. Test it:  node tests/recovery-test.js
 
 ## Term Pack (Teacher Plus)
 Home > Term Pack. A pack holds a subject and class, the textbook(s), the topics for each of the three terms, the weeks in each

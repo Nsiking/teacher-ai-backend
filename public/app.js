@@ -213,6 +213,7 @@
       '<div class="card">' +
       (signup ? '<label for="a-name">Your name</label><input id="a-name" autocomplete="name" placeholder="e.g. Mrs Adaeze Obi" maxlength="60">' : '') +
       '<label for="a-id">Phone number or email</label><input id="a-id" autocomplete="username" inputmode="email" placeholder="08012345678 or you@email.com" maxlength="120">' +
+      (signup ? '<label for="a-email">Email (recommended)</label><input id="a-email" type="email" autocomplete="email" inputmode="email" maxlength="120" placeholder="you@email.com"><p class="hint" style="margin:4px 0 0">If you sign up with a phone number, add an email too, so you can reset your password yourself later.</p>' : '') +
       '<label for="a-pw">Password' + (signup ? ' (at least 8 characters)' : '') + '</label>' + pwInput('a-pw', signup ? 'new-password' : 'current-password', ' maxlength="100"') + '' +
       '<div class="err" id="a-err">' + esc(message || '') + '</div>' +
       '<button class="btn block" data-act="auth">' + (signup ? 'Create my account' : 'Log in') + '</button>' +
@@ -231,7 +232,9 @@
     if (authMode === 'signup') {
       var nm = $('#a-name').value.trim();
       if (nm.length < 2) { err.textContent = 'Please enter your name.'; return; }
-      body = { name: nm, password: pw }; if (id.indexOf('@') > -1) body.email = id; else body.phone = id;
+      body = { name: nm, password: pw };
+      if (id.indexOf('@') > -1) body.email = id;
+      else { body.phone = id; var em = (($('#a-email') || {}).value || '').trim(); if (em) body.email = em; }
       path = '/api/auth/signup';
     } else { body = { identifier: id, password: pw }; path = '/api/auth/login'; }
     btn.disabled = true; btn.textContent = 'Please wait…';
@@ -254,6 +257,7 @@
     shell(
       '<h1>Good day, ' + esc(first) + '</h1><p class="sub">What do you want to prepare today?</p>' +
       (S.installEvt ? '<div class="banner"><span>Install this app on your phone for quick access.</span><button class="btn small" data-act="install">Install</button></div>' : '') +
+      recoveryBanner() +
       '<div id="today-box"></div>' +
       '<div class="tiles">' + tiles + '</div>' +
       '<div class="card" style="margin-top:14px"><div class="kv" style="padding-top:0"><span>Today</span><b>' + left + ' of ' + u.limit + ' left</b></div>' +
@@ -845,6 +849,25 @@
   }
 
   // ---------------------------------------------------------------- account
+  // ---- recovery email: add it once, confirm it with a code, then it can log in and reset the password
+  var rcSent = '';
+  function rcForm(email, label) {
+    return '<label for="rc-email">Email</label><input id="rc-email" type="email" autocomplete="email" inputmode="email" maxlength="120" placeholder="you@email.com" value="' + esc(email) + '">' +
+      '<label for="rc-pw">Your password</label>' + pwInput('rc-pw', 'current-password') +
+      '<div class="err" id="rc-err"></div><button class="btn block" data-act="rcsend">' + label + '</button>';
+  }
+  function recoveryCard() {
+    var u = S.user, inner;
+    if (u.email && u.emailVerified) inner = '<p class="sub">✓ <b>' + esc(u.email) + '</b> is confirmed. You can log in with it, and use it to reset your password yourself.</p><div id="rc-form"><button class="btn alt small" data-act="rcform">Change email</button></div>';
+    else if (u.email) inner = '<p class="sub"><b>' + esc(u.email) + '</b> is not confirmed yet. Confirm it so you can reset your password yourself.</p><div id="rc-form">' + rcForm(u.email, 'Send me a code to confirm') + '</div>';
+    else inner = '<p class="sub">Add an email so you can reset your password yourself, even if you forget it. We will send a code to confirm it.</p><div id="rc-form">' + rcForm('', 'Send me a code') + '</div>';
+    return '<div class="card" id="rc-card"><b>Recovery email</b>' + inner + '</div>';
+  }
+  function recoveryBanner() {
+    var u = S.user;
+    if (!u || u.emailVerified || (jget('tt_rc_dismiss_' + u.id, 0) > Date.now())) return '';
+    return '<div class="banner" id="rc-banner"><span>' + (u.email ? 'Confirm your email' : 'Add a recovery email') + ' so you can reset your password yourself.</span><span style="display:flex;gap:8px;align-items:center"><button class="btn small" data-go="account">' + (u.email ? 'Confirm' : 'Add') + '</button><button class="link" data-act="rcdismiss" aria-label="Hide this reminder" style="padding:6px">✕</button></span></div>';
+  }
   function viewAccount() {
     var u = S.user, us = S.usage || { used: 0, limit: 0 };
     shell(
@@ -856,6 +879,7 @@
       (isPaid() && u.planExpiresAt ? '<div class="kv"><span>Valid until</span><b>' + fmtDate(u.planExpiresAt) + '</b></div>' : '') +
       '<div class="kv"><span>Used today</span><b>' + us.used + ' of ' + us.limit + '</b></div>' +
       (us.monthlyLimit ? '<div class="kv"><span>Used this month</span><b>' + (us.monthlyUsed || 0) + ' of ' + us.monthlyLimit + '</b></div>' : '') + '</div>' +
+      recoveryCard() +
       '<div class="card"><b>Appearance</b><p class="sub">Choose how the app looks. Automatic follows your phone.</p><div class="seg3">' +
       [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="settheme" data-t="' + x[0] + '" class="' + (getTheme() === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div></div>' +
       plansCard() +
@@ -967,6 +991,36 @@
     deleteitem: confirmDelete,
     dodelete: doDelete,
     closemodal: closeModal,
+    rcdismiss: function () { jset('tt_rc_dismiss_' + S.user.id, Date.now() + 14 * 86400000); var b = $('#rc-banner'); if (b) b.remove(); },
+    rcform: function () { var f = $('#rc-form'); if (f) f.innerHTML = rcForm('', 'Send me a code'); },
+    rcsend: async function (btn) {
+      var err = $('#rc-err'); err.textContent = '';
+      var email = ($('#rc-email').value || '').trim(), pw = $('#rc-pw').value;
+      if (!email || email.indexOf('@') < 1) { err.textContent = 'Enter your email address.'; return; }
+      if (!pw) { err.textContent = 'Enter your password to confirm it is you.'; return; }
+      if (!navigator.onLine) { err.textContent = 'You are offline. Please connect to the internet.'; return; }
+      btn.disabled = true; var label = btn.textContent; btn.textContent = 'Please wait…';
+      try {
+        var r = await api('POST', '/api/me/email/request', { email: email, password: pw });
+        rcSent = r.sentTo;
+        modal('<h3>Enter the code</h3><p class="sub">We sent a 6-digit code to <b>' + esc(r.sentTo) + '</b>. It works for ' + r.minutes + ' minutes. Check your spam folder too.</p>' +
+          '<input id="rc-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px;font-size:1.3rem;text-align:center"><div class="err" id="rc-merr"></div>' +
+          '<button class="btn" data-act="rcconfirm">Confirm my email</button><button class="btn alt" data-act="closemodal">Cancel</button>' +
+          '<p class="hint">No code after a few minutes? Cancel, and ask again.</p>');
+      } catch (e) { err.textContent = e.message; }
+      btn.disabled = false; btn.textContent = label;
+    },
+    rcconfirm: async function (btn) {
+      var err = $('#rc-merr'); err.textContent = '';
+      var code = ($('#rc-code').value || '').replace(/\s+/g, '');
+      if (!/^\d{6}$/.test(code)) { err.textContent = 'Enter the 6-digit code.'; return; }
+      btn.disabled = true; btn.textContent = 'Please wait…';
+      try {
+        var r = await api('POST', '/api/me/email/confirm', { code: code });
+        S.user = r.user; jset('tt_user', r.user);
+        closeModal(); toast('Email confirmed'); viewAccount();
+      } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Confirm my email'; }
+    },
     toggleeye: function (btn) {
       var inp = btn.parentNode.querySelector('input'); if (!inp) return;
       var show = inp.type === 'password';

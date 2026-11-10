@@ -88,7 +88,7 @@ const codeOf = (rec) => /\b(\d{6})\b/.exec(rec.body.textContent || rec.body.text
     n = calls.length;
     r = await B('POST', '/api/auth/reset/request', { identifier: '08031230000' }, null, false, ip());
     await sleep(300);
-    check('a phone number is "not available" there, and nothing is sent', r.body.available === false && r.body.channel === 'sms' && calls.length === n, r.body);
+    check('a phone number is still accepted there (a confirmed recovery email could serve it), but this account has none, so nothing is sent', r.body.available === true && r.body.channel === 'sms' && r.body.channels.sms === false && r.body.channels.email === true && calls.length === n, r.body);
 
     console.log('Email by Brevo and SMS by Termii');
     r = await A('GET', '/api/auth/reset/config');
@@ -114,7 +114,7 @@ const codeOf = (rec) => /\b(\d{6})\b/.exec(rec.body.textContent || rec.body.text
     n = calls.length;
     r = await A('POST', '/api/auth/reset/request', { identifier: 'nobody@example.com' }, null, false, ip());
     await sleep(400);
-    check('an email with no account gets exactly the same answer, and nothing is sent', JSON.stringify(r.body) === JSON.stringify({ ok: true, channel: 'email', available: true, minutes: 15 }) && calls.length === n, r.body);
+    check('an email with no account gets exactly the same answer, and nothing is sent', JSON.stringify(r.body) === JSON.stringify({ ok: true, channel: 'email', available: true, minutes: 15, channels: { email: true, sms: true } }) && calls.length === n, r.body);
     n = calls.length;
     r = await A('POST', '/api/auth/reset/request', { identifier: '08051112222' }, null, false, ip());
     await waitFor(() => calls.length > n);
@@ -149,16 +149,21 @@ const codeOf = (rec) => /\b(\d{6})\b/.exec(rec.body.textContent || rec.body.text
     r = await conf('ghost@example.com', freshAda, 'newpassword9');
     check('an unknown account gets the very same message (nothing is revealed)', r.status === 400 && r.body.code === 'BAD_CODE' && r.body.error === 'That code is wrong or has expired. Please check it, or ask for a new one.');
     for (let i = 0; i < 3; i++) await conf('ada@example.com', '111111', 'newpassword9');
-    check('after 5 wrong tries the code is destroyed', r.status === 400 && db.prepare('SELECT COUNT(*) c FROM reset_codes WHERE user_id = ?').get(adaId).c === 0);
+    const cancelled = () => { const x = db.prepare('SELECT * FROM reset_codes WHERE user_id = ?').get(adaId); return !x || x.expires_at === 0; };
+    check('after 5 wrong tries the code is cancelled', r.status === 400 && cancelled());
     r = await conf('ada@example.com', freshAda, 'newpassword9');
     check('even the right code no longer works then', r.status === 400 && r.body.code === 'BAD_CODE');
     n = calls.length;
+    await A('POST', '/api/auth/reset/request', { identifier: 'ada@example.com' }, null, false, ip());
+    await sleep(400);
+    check('cancelling a code does not clear the one-a-minute limit: asking again at once sends nothing', calls.length === n);
+    rewind(adaId);
     await A('POST', '/api/auth/reset/request', { identifier: 'ada@example.com' }, null, false, ip());
     await waitFor(() => calls.length > n);
     const newCode = codeOf(calls[calls.length - 1]);
     db.prepare('UPDATE reset_codes SET expires_at = ? WHERE user_id = ?').run(Date.now() - 1000, adaId);
     r = await conf('ada@example.com', newCode, 'newpassword9');
-    check('an expired code is refused, and removed', r.status === 400 && r.body.code === 'BAD_CODE' && db.prepare('SELECT COUNT(*) c FROM reset_codes WHERE user_id = ?').get(adaId).c === 0);
+    check('an expired code is refused', r.status === 400 && r.body.code === 'BAD_CODE');
 
     console.log('One new code a minute, and five a day');
     n = calls.length;
