@@ -154,6 +154,16 @@ CREATE TABLE IF NOT EXISTS formats (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_formats_user ON formats (user_id, type);
+CREATE TABLE IF NOT EXISTS reset_codes (
+  user_id INTEGER PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  sent_at INTEGER NOT NULL,
+  sends_today INTEGER NOT NULL DEFAULT 0,
+  sends_day TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS packs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,

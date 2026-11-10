@@ -189,7 +189,16 @@ function register(add, helpers) {
   add('POST', '/api/timetable/make', { auth: true }, (ctx) => {
     if (helpers.rateLimit) helpers.rateLimit('tt:' + ctx.user.id, 30, 60 * 1000);
     const seed = ctx.body.seed === undefined || ctx.body.seed === null ? undefined : Number(ctx.body.seed);
-    const t = makeTimetable(ctx.body, Number.isInteger(seed) ? seed : undefined);
+    let t = makeTimetable(ctx.body, Number.isInteger(seed) ? seed : undefined);
+    // "Another arrangement": keep trying until it really differs from the one on screen (a small timetable can repeat by chance)
+    let sameAsBefore = false;
+    if (ctx.body.differentFrom !== undefined && ctx.body.differentFrom !== null) {
+      const prev = db.prepare("SELECT content FROM items WHERE id = ? AND user_id = ? AND kind = 'timetable'").get(Number(ctx.body.differentFrom), ctx.user.id);
+      if (prev) {
+        for (let i = 0; i < 40 && t.content === prev.content; i++) t = makeTimetable(ctx.body, undefined);
+        sameAsBefore = t.content === prev.content;
+      }
+    }
     const now = Date.now();
     const title = 'Timetable: ' + t.input.className;
     const meta = {
@@ -198,7 +207,7 @@ function register(add, helpers) {
     };
     const info = db.prepare('INSERT INTO items (user_id, kind, title, meta, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(ctx.user.id, 'timetable', title, JSON.stringify(meta), t.content, now, now);
-    return { id: Number(info.lastInsertRowid), kind: 'timetable', title, content: t.content, stats: t.stats, seed: t.seed };
+    return { id: Number(info.lastInsertRowid), kind: 'timetable', title, content: t.content, stats: t.stats, seed: t.seed, sameAsBefore };
   });
 }
 

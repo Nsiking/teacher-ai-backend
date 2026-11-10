@@ -1,4 +1,4 @@
-# SmartClass Teacher AI - Backend + teacher app screens (version 18)
+# SmartClass Teacher AI - Backend + teacher app screens (version 19)
 
 This is the server for the "SmartClass Teacher AI" Android app. It is a NEW project.
 It is NOT Class Register, Report Cards or School Management. Do NOT run apply-sm-connection.js here.
@@ -76,6 +76,17 @@ Lesson notes and plans have a "Level of detail" choice (Simple, Standard, Detail
 "Check" on a lesson note, plan, scheme, question paper or worksheet: the AI re-does every calculation, checks every answer and
 lists real mistakes (where, what is wrong, the fix). "Make a corrected copy" saves a new item and keeps the original.
 Each check and each corrected copy counts as 1 generation.
+
+## Password reset (code by email or SMS)
+Log in screen > Forgot password? The teacher enters their email or phone number, receives a 6-digit code (email through Brevo or
+Resend, SMS through Termii), and enters it with a new password; a reset signs out every old session and logs the teacher in.
+Safety: the code is never stored (only a fingerprint), works for 15 minutes, allows 5 tries, one new code a minute and 5 a day
+per account; 10 requests an hour per address; the answer is the same whether or not the account exists, and messages are sent in
+the background so the speed does not give the account away. If a way is not set up, the screen says so and offers WhatsApp help.
+Settings (Render > Environment): EMAIL_PROVIDER (brevo or resend), EMAIL_API_KEY, EMAIL_FROM ("SmartClass Teacher AI
+<no-reply@yourdomain>", a verified sender); SMS_PROVIDER=termii, TERMII_API_KEY, TERMII_SENDER_ID, TERMII_CHANNEL (dnd for
+transactional), SMS_DAILY_CAP (default 300 a day, a safety limit on SMS spending). The admin page has a "Password reset
+messages" card with plain-words problems and a "Send a test message" button. Test it:  node tests/reset-test.js
 
 ## Term Pack (Teacher Plus)
 Home > Term Pack. A pack holds a subject and class, the textbook(s), the topics for each of the three terms, the weeks in each

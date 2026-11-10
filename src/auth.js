@@ -103,7 +103,11 @@ function findByIdentifier(identifier) {
   return db.prepare('SELECT * FROM users WHERE phone = ?').get(p) || null;
 }
 
+// A one-way fingerprint of a reset code (the code itself is never stored).
+function codeHash(userId, code) { return sign('reset:' + userId + ':' + code); }
+
 module.exports = {
+  codeHash,
   hashPassword, verifyPassword, DUMMY_HASH, checkPasswordRule,
   signToken, authenticate, normEmail, normPhone, findByIdentifier,
 };

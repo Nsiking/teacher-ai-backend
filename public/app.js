@@ -171,6 +171,7 @@
   async function route() {
     var parts = (location.hash.replace(/^#\/?/, '') || 'home').split('/');
     var name = parts[0], arg = parts[1];
+    if (name === 'forgot' && TT.views.forgot) return TT.views.forgot();
     if (!S.token) return viewAuth();
     if (!S.user) {
       try { await loadMe(); }
@@ -208,6 +209,7 @@
       '<label for="a-pw">Password' + (signup ? ' (at least 8 characters)' : '') + '</label><input id="a-pw" type="password" autocomplete="' + (signup ? 'new-password' : 'current-password') + '" maxlength="100">' +
       '<div class="err" id="a-err">' + esc(message || '') + '</div>' +
       '<button class="btn block" data-act="auth">' + (signup ? 'Create my account' : 'Log in') + '</button>' +
+      (signup ? '' : '<div class="toggle"><button class="link" data-go="forgot">Forgot password?</button></div>') +
       '<div class="toggle">' + (signup ? 'Already have an account?' : 'New here?') + ' <button class="link" data-act="authmode">' + (signup ? 'Log in' : 'Create an account') + '</button></div>' +
       '</div>' +
       '<p class="hint" style="text-align:center">By continuing you agree to our <a href="' + siteUrl('/terms') + '" target="_blank" rel="noopener" style="color:var(--brand)">Terms of Use</a> and <a href="' + siteUrl('/privacy') + '" target="_blank" rel="noopener" style="color:var(--brand)">Privacy Policy</a>.</p>',
@@ -993,9 +995,9 @@
       var m = currentItem && currentItem.meta; if (!m) return;
       btn.disabled = true;
       try {
-        var body = Object.assign({}, m, { seed: Math.floor(Math.random() * 2147483647) });
+        var body = Object.assign({}, m, { seed: Math.floor(Math.random() * 2147483647), differentFrom: currentItem.id });
         var r = await api('POST', '/api/timetable/make', body);
-        go('#/item/' + r.id); toast('Here is another arrangement');
+        go('#/item/' + r.id); toast(r.sameAsBefore ? 'This is the only arrangement that fits your rules' : 'Here is another arrangement');
       } catch (e) { toast(e.message, true); btn.disabled = false; }
     },
     addtextbook: function () { modal(tbFormHtml(null), true); },
@@ -1032,7 +1034,7 @@
 
   Object.keys(TT.actions).forEach(function (k) { actions[k] = TT.actions[k]; });
   TT.api = api; TT.shell = shell; TT.esc = esc; TT.toast = toast; TT.modal = modal; TT.closeModal = closeModal;
-  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid; TT.prepareImages = prepareImages; TT.wordFile = wordFile; TT.showLimit = showLimit;
+  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid; TT.prepareImages = prepareImages; TT.saveSession = saveSession; TT.waLink = waLink; TT.wordFile = wordFile; TT.showLimit = showLimit;
   TT.setUsage = function (u) { if (u) { S.usage = u; jset('tt_usage', u); } };
   TT.classNames = function () { return (S.meta && S.meta.classes) || []; };
   // Fills the subject and class for the next lesson plan or note (used from the timetable).

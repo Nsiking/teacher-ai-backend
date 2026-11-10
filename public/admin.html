@@ -42,6 +42,15 @@
     <div id="aiTest" style="font-size:.88rem;margin-top:8px"></div>
   </div>
   <div class="card">
+    <h2>Password reset messages</h2>
+    <div id="msgStatus" style="font-size:.92rem">Not loaded yet.</div>
+    <label>Send a test to (your own email or phone number)</label>
+    <input id="msgTo" placeholder="you@email.com or 08012345678">
+    <button id="btnMsgTest">Send a test message</button>
+    <p style="color:var(--mute);font-size:.82rem;margin:6px 0 0">An address with @ sends an email. A phone number sends an SMS (it uses your Termii credit).</p>
+    <div id="msgTest" style="font-size:.88rem;margin-top:8px"></div>
+  </div>
+  <div class="card">
     <h2>Database backups</h2>
     <div id="bkStatus" style="font-size:.92rem">Not loaded yet.</div>
     <button id="btnBkRun">Back up now</button>
@@ -181,7 +190,29 @@ $('btnAiTest').onclick = async () => {
     await loadAi();
   } catch (e) { $('aiTest').textContent = ''; msg(e.message, true); }
 };
-$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); await loadBackup(false); await loadCatalogue(); await loadAi(); msg(''); } catch (e) { msg(e.message, true); } };
+async function loadMsg() {
+  const m = await api('GET', '/api/admin/messaging');
+  function line(name, x, extra) {
+    if (!x.provider) return '<b>' + name + ':</b> <span style="color:var(--err)">not set up</span>.<br>';
+    const state = x.lastError && x.problemNow ? '<b style="color:var(--err)">PROBLEM</b>' : (x.lastOkAt ? '<b style="color:var(--ok,#15803d)">Working</b>' : 'Set up (no message sent yet)');
+    let h = '<b>' + name + ':</b> ' + state + ' &middot; ' + esc(x.provider) + extra + (x.keySet ? '' : ' &middot; <span style="color:var(--err)">key missing</span>');
+    if (x.lastOkAt) h += '<br><small>Last sent: ' + esc(ago(x.lastOkAt)) + '</small>';
+    if (x.lastError) h += '<br><small style="color:' + (x.problemNow ? 'var(--err)' : 'var(--mute)') + '">Last problem: ' + esc(ago(x.lastError.at)) + '. ' + esc(x.lastError.advice) + ' (' + esc(x.lastError.kind) + (x.lastError.detail ? ' - ' + esc(x.lastError.detail) : '') + ')</small>';
+    return h + '<br>';
+  }
+  $('msgStatus').innerHTML = line('Email', m.email, ' &middot; from ' + esc(m.email.from || 'not set')) + line('SMS', m.sms, ' &middot; Sender ID ' + esc(m.sms.senderId) + ' &middot; route ' + esc(m.sms.route) + ' &middot; today ' + m.sms.today + ' of ' + m.sms.cap);
+}
+$('btnMsgTest').onclick = async () => {
+  const to = $('msgTo').value.trim();
+  if (!to) { $('msgTest').textContent = 'Type your own email address or phone number first.'; return; }
+  $('msgTest').textContent = 'Sending…';
+  try {
+    const r = await api('POST', '/api/admin/messaging/test', { kind: to.includes('@') ? 'email' : 'sms', to });
+    $('msgTest').innerHTML = r.ok ? '<span style="color:var(--ok,#15803d)">&#10003; Sent. Check your ' + (to.includes('@') ? 'inbox (and spam)' : 'phone') + '.</span>' : '<span style="color:var(--err)">&#10007; ' + esc(r.advice) + '</span>';
+    await loadMsg();
+  } catch (e) { $('msgTest').textContent = ''; msg(e.message, true); }
+};
+$('btnStats').onclick = async () => { msg('Loading...'); try { await loadStats(); await loadUsers(); await loadBackup(false); await loadCatalogue(); await loadAi(); await loadMsg(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnUsers').onclick = async () => { try { await loadUsers(); msg(''); } catch (e) { msg(e.message, true); } };
 $('btnPlan').onclick = async () => { try { const r = await api('POST', '/api/admin/set-plan', { identifier: $('pIdent').value, plan: $('pPlan').value, days: Number($('pDays').value) }); msg('Saved: ' + r.user.name + ' is now on the ' + r.user.plan + ' plan' + (r.user.planExpiresAt ? ' until ' + new Date(r.user.planExpiresAt).toLocaleDateString() : '') + '.'); await loadUsers(); } catch (e) { msg(e.message, true); } };
 $('btnDel').onclick = async () => { try { if ($('xOk').value.trim() !== 'DELETE') throw new Error('Type DELETE in the box to confirm.'); await api('POST', '/api/admin/delete-user', { identifier: $('xIdent').value }); msg('Account deleted.'); $('xIdent').value = ''; $('xOk').value = ''; await loadUsers(); } catch (e) { msg(e.message, true); } };

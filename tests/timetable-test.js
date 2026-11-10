@@ -180,6 +180,20 @@ async function startServer(port, extraEnv) {
     check('the saved settings make the same timetable again (same seed)', r.status === 200 && r.body.content === first);
     r = await call('POST', '/api/timetable/make', Object.assign({}, TYPICAL, { seed: 43 }), tok);
     check('another seed makes another arrangement', r.status === 200 && r.body.content !== first);
+    // "Another arrangement" must really differ from the one on screen, even for a small timetable where a repeat is likely
+    const SMALL = { className: 'Primary 1', days: 5, periodsPerDay: 3, startTime: '08:00', periodMinutes: 40, breaks: [], subjects: [{ name: 'Maths', perWeek: 5 }, { name: 'English', perWeek: 5 }, { name: 'Science', perWeek: 5 }] };
+    r = await call('POST', '/api/timetable/make', Object.assign({}, SMALL, { seed: 1 }), tok);
+    let prevId = r.body.id, allDiffer = r.status === 200, flagged = false;
+    for (let i = 0; i < 12 && allDiffer; i++) {
+      const prevContent = (await call('GET', '/api/library/' + prevId, null, tok)).body.content;
+      r = await call('POST', '/api/timetable/make', Object.assign({}, SMALL, { seed: 7, differentFrom: prevId }), tok);
+      if (r.status !== 200 || r.body.content === prevContent) allDiffer = false;
+      flagged = flagged || r.body.sameAsBefore === true;
+      prevId = r.body.id;
+    }
+    check('"Another arrangement" 12 times in a row on a small timetable: every one differs from the one before', allDiffer && !flagged, { allDiffer, flagged });
+    r = await call('POST', '/api/timetable/make', Object.assign({}, SMALL, { differentFrom: 999999 }), tok);
+    check('"differentFrom" with an item that is not yours (or does not exist) is simply ignored', r.status === 200 && r.body.sameAsBefore === false);
     r = await call('POST', '/api/timetable/make', Object.assign({}, TYPICAL, { subjects: TYPICAL.subjects.concat([{ name: 'Extra', perWeek: 9 }]) }), tok);
     check('bad input gives a clear message over the web too', r.status === 400 && r.body.code === 'TOO_MANY_PERIODS' && /Remove 4/.test(r.body.error), r.body);
 
