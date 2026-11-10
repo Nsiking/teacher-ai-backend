@@ -40,8 +40,7 @@
     var email = st.id.indexOf('@') > -1;
     T.shell(hero('Enter your code', 'If there is an account for <b>' + esc(mask(st.id)) + '</b>, we have sent a 6-digit code to it. It works for 15 minutes.') +
       '<div class="card"><label for="fg-code" style="margin-top:0">6-digit code</label><input id="fg-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px;font-size:1.3rem;text-align:center">' +
-      '<label for="fg-pw">New password (at least 8 characters)</label><input id="fg-pw" type="password" autocomplete="new-password" maxlength="100">' +
-      '<label class="chk"><input type="checkbox" id="fg-show"> Show the password</label>' +
+      '<label for="fg-pw">New password (at least 8 characters)</label>' + T.pwInput('fg-pw', 'new-password', ' maxlength="100"') + '' +
       '<div class="err" id="fg-err"></div>' +
       '<button class="btn block" data-act="fgconfirm">Change my password</button>' +
       '<div class="toggle"><button class="link" data-act="fgresend" id="fg-resend" disabled>Send the code again (60)</button></div>' +
@@ -60,9 +59,6 @@
       else b.textContent = 'Send the code again (' + left + ')';
     }, 1000);
   }
-  document.addEventListener('change', function (e) {
-    if (e.target && e.target.id === 'fg-show') { var p = $('#fg-pw'); if (p) p.type = e.target.checked ? 'text' : 'password'; }
-  });
 
   async function request(btn, resend) {
     var err = $('#fg-err'), note = $('#fg-note');

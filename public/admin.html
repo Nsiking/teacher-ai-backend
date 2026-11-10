@@ -23,6 +23,11 @@
   table { width:100%; border-collapse:collapse; font-size:.85rem; display:block; overflow-x:auto; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
   .stat { display:inline-block; margin:0 18px 8px 0; } .stat b { display:block; font-size:1.3rem; }
+
+.pw { position: relative; }
+.pw input { padding-right: 52px; }
+.pw .eye { position: absolute; right: 4px; top: 0; bottom: 0; margin: auto 0; width: 44px; height: 44px; border: 0; background: transparent; color: var(--mute); cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 10px; padding: 0; }
+.pw .eye svg { width: 22px; height: 22px; }
 </style>
 </head>
 <body>
@@ -266,6 +271,16 @@ $('btnBulk').onclick = async () => {
   } catch (e) { msg(e.message, true); }
 };
 $('btnReset').onclick = async () => { try { await api('POST', '/api/admin/reset-password', { identifier: $('rIdent').value, newPassword: $('rPw').value }); msg('Password reset. Tell the teacher the new password.'); $('rPw').value = ''; } catch (e) { msg(e.message, true); } };
+
+// eye button on the admin key box
+(function () {
+  const i = document.getElementById('key'); if (!i) return;
+  const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  const w = document.createElement('div'); w.className = 'pw'; i.parentNode.insertBefore(w, i); w.appendChild(i);
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'eye'; b.setAttribute('aria-label', 'Show admin key'); b.innerHTML = EYE; w.appendChild(b);
+  b.onclick = () => { const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.innerHTML = show ? OFF : EYE; b.setAttribute('aria-label', show ? 'Hide admin key' : 'Show admin key'); };
+})();
 </script>
 </body>
 </html>

@@ -28,6 +28,13 @@
   Object.keys(KINDS).forEach(function (k) { CODE_TO_KEY[KINDS[k].code] = k; });
 
   // ---------------------------------------------------------------- helpers
+  // A password box with an eye button that shows or hides what is typed.
+  var EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  function pwInput(id, autocomplete, extra) {
+    return '<div class="pw"><input id="' + id + '" type="password" autocomplete="' + autocomplete + '"' + (extra || '') + '>' +
+      '<button type="button" class="eye" data-act="toggleeye" aria-label="Show password" aria-pressed="false">' + EYE + '</button></div>';
+  }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(sel, el) { return (el || document).querySelector(sel); }
   function fmtDate(ms) { try { return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return ''; } }
@@ -206,7 +213,7 @@
       '<div class="card">' +
       (signup ? '<label for="a-name">Your name</label><input id="a-name" autocomplete="name" placeholder="e.g. Mrs Adaeze Obi" maxlength="60">' : '') +
       '<label for="a-id">Phone number or email</label><input id="a-id" autocomplete="username" inputmode="email" placeholder="08012345678 or you@email.com" maxlength="120">' +
-      '<label for="a-pw">Password' + (signup ? ' (at least 8 characters)' : '') + '</label><input id="a-pw" type="password" autocomplete="' + (signup ? 'new-password' : 'current-password') + '" maxlength="100">' +
+      '<label for="a-pw">Password' + (signup ? ' (at least 8 characters)' : '') + '</label>' + pwInput('a-pw', signup ? 'new-password' : 'current-password', ' maxlength="100"') + '' +
       '<div class="err" id="a-err">' + esc(message || '') + '</div>' +
       '<button class="btn block" data-act="auth">' + (signup ? 'Create my account' : 'Log in') + '</button>' +
       (signup ? '' : '<div class="toggle"><button class="link" data-go="forgot">Forgot password?</button></div>') +
@@ -856,13 +863,13 @@
       '<div class="card"><b>My textbooks</b><p class="sub">Add the books your school uses, with their contents. The AI will cite them exactly in lesson notes, schemes, questions and worksheets.</p><button class="btn alt" data-go="textbooks">Open my textbooks</button></div>' +
       (S.installEvt ? '<div class="card"><b>Install the app</b><p class="sub">Add it to your home screen.</p><button class="btn alt" data-act="install">Install</button></div>' : '') +
       '<div class="card"><b>Change password</b>' +
-      '<label for="c-old">Current password</label><input id="c-old" type="password" autocomplete="current-password">' +
-      '<label for="c-new">New password (8+ characters)</label><input id="c-new" type="password" autocomplete="new-password">' +
+      '<label for="c-old">Current password</label>' + pwInput('c-old', 'current-password') + '' +
+      '<label for="c-new">New password (8+ characters)</label>' + pwInput('c-new', 'new-password') + '' +
       '<div class="err" id="c-err"></div><button class="btn block alt" data-act="changepw">Change password</button></div>' +
       '<button class="btn block alt" data-act="logout">Log out</button>' +
       '<p class="hint" style="text-align:center;margin-top:14px"><a href="' + siteUrl('/privacy') + '" target="_blank" rel="noopener" style="color:var(--brand)">Privacy Policy</a> · <a href="' + siteUrl('/terms') + '" target="_blank" rel="noopener" style="color:var(--brand)">Terms of Use</a> · <a href="mailto:support@smartclassaiacademy.com" style="color:var(--brand)">support@smartclassaiacademy.com</a></p>' +
       '<div class="card" style="margin-top:22px"><b>Delete my account</b><p class="sub">This permanently removes your account, your library, your classes, attendance and scores.</p>' +
-      '<label for="d-pw">Enter your password to confirm</label><input id="d-pw" type="password" autocomplete="current-password">' +
+      '<label for="d-pw">Enter your password to confirm</label>' + pwInput('d-pw', 'current-password') + '' +
       '<div class="err" id="d-err"></div><button class="btn block danger" data-act="deleteaccount">Delete my account</button></div>',
       { title: 'Account', nav: 'account' }
     );
@@ -960,6 +967,14 @@
     deleteitem: confirmDelete,
     dodelete: doDelete,
     closemodal: closeModal,
+    toggleeye: function (btn) {
+      var inp = btn.parentNode.querySelector('input'); if (!inp) return;
+      var show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      btn.innerHTML = show ? EYE_OFF : EYE;
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+    },
     checkitem: async function () {
       if (!currentItem) return;
       if (!navigator.onLine) return toast('You are offline. Please connect to the internet.', true);
@@ -1034,7 +1049,7 @@
 
   Object.keys(TT.actions).forEach(function (k) { actions[k] = TT.actions[k]; });
   TT.api = api; TT.shell = shell; TT.esc = esc; TT.toast = toast; TT.modal = modal; TT.closeModal = closeModal;
-  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid; TT.prepareImages = prepareImages; TT.saveSession = saveSession; TT.waLink = waLink; TT.wordFile = wordFile; TT.showLimit = showLimit;
+  TT.go = go; TT.route = route; TT.copyText = copyText; TT.saveFile = saveFile; TT.isPaid = isPaid; TT.prepareImages = prepareImages; TT.pwInput = pwInput; TT.saveSession = saveSession; TT.waLink = waLink; TT.wordFile = wordFile; TT.showLimit = showLimit;
   TT.setUsage = function (u) { if (u) { S.usage = u; jset('tt_usage', u); } };
   TT.classNames = function () { return (S.meta && S.meta.classes) || []; };
   // Fills the subject and class for the next lesson plan or note (used from the timetable).

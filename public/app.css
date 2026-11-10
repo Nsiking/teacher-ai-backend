@@ -224,3 +224,11 @@ a.btn { text-decoration: none; }
 
 .fs-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
 input[type=checkbox] { accent-color: var(--brand); }
+
+/* password box with an eye to show or hide the password */
+.pw { position: relative; }
+.pw input { padding-right: 54px; }
+.pw .eye { position: absolute; right: 4px; top: 0; bottom: 0; margin: auto 0; width: 46px; height: 46px; border: 0; background: transparent; color: var(--mute); cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 12px; padding: 0; }
+.pw .eye:hover { color: var(--ink); }
+.pw .eye:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.pw .eye svg { width: 24px; height: 24px; }
